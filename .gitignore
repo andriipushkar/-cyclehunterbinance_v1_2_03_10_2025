@@ -1,0 +1,24 @@
+# Virtual Environments
+.venv
+venv/
+env/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Environment files
+.env
+
+# Log files
+logs/
+*.log
+
+# Output files
+cli-monitor-v2.1/output/
+
+# IDE specific
+.idea/
+.vscode/
