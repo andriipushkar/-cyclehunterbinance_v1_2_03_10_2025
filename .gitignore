@@ -8,6 +8,7 @@ __pycache__/
 *.pyc
 *.pyo
 *.pyd
+.pytest_cache/
 
 # Environment files
 .env
@@ -17,7 +18,7 @@ logs/
 *.log
 
 # Output files
-cli-monitor-v2.1/output/
+output/
 
 # IDE specific
 .idea/

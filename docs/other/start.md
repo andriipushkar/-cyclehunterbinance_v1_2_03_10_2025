@@ -1,0 +1,2 @@
+export GOOGLE_CLOUD_PROJECT=techanal 
+gemini
