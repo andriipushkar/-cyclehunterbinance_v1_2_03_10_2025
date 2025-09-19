@@ -1,6 +1,6 @@
 import argparse
 import asyncio
-from .cycle_finder import find_triangular_arbitrage_cycles
+from .cycle_finder import find_arbitrage_cycles
 from .profit_calculator import main as profit_calculator_main
 from .backtester import run_backtest
 
@@ -17,7 +17,7 @@ def add_arguments(parser):
 
 def run(args):
     if args.arbitrage_command == "find-cycles":
-        find_triangular_arbitrage_cycles()
+        find_arbitrage_cycles()
     elif args.arbitrage_command == "run-monitor":
         asyncio.run(profit_calculator_main())
     elif args.arbitrage_command == "backtest":

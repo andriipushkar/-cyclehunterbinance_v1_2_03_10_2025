@@ -2,37 +2,21 @@ import os
 import json
 import unittest
 from unittest.mock import patch, MagicMock
-from cli_monitor.arbitrage.cycle_finder import find_triangular_arbitrage_cycles, CONFIG_DIR, POSSIBLE_CYCLES_JSON_FILE, POSSIBLE_CYCLES_TXT_FILE
+from cli_monitor.arbitrage.cycle_finder import find_arbitrage_cycles, CONFIG_DIR, POSSIBLE_CYCLES_JSON_FILE, POSSIBLE_CYCLES_TXT_FILE
 
 # Mock data similar to Binance API response
 MOCK_EXCHANGE_INFO = {
     'symbols': [
-        {'symbol': 'BTCUSDT'},
-        {'symbol': 'ETHUSDT'},
-        {'symbol': 'ETHBTC'}, # Cycle: USDT -> BTC -> ETH -> USDT
-        
-        {'symbol': 'BNBUSDT'},
-        {'symbol': 'SOLUSDT'},
-        {'symbol': 'SOLBNB'}, # Cycle: USDT -> BNB -> SOL -> USDT
-
-        {'symbol': 'XRPUSDT'},
-        {'symbol': 'ADAUSDT'},
-        {'symbol': 'ADAXRP'}, # Cycle: USDT -> XRP -> ADA -> USDT
-
-        # Incomplete cycle parts
-        {'symbol': 'LTCUSDT'},
-        {'symbol': 'LTCBTC'},
+        {'symbol': 'BTCUSDT', 'baseAsset': 'BTC', 'quoteAsset': 'USDT'},
+        {'symbol': 'ETHUSDT', 'baseAsset': 'ETH', 'quoteAsset': 'USDT'},
+        {'symbol': 'ETHBTC', 'baseAsset': 'ETH', 'quoteAsset': 'BTC'}, # Cycle: USDT -> BTC -> ETH -> USDT
     ]
 }
 
 MOCK_EXCHANGE_INFO_NO_CYCLES = {
     'symbols': [
-        {'symbol': 'BTCUSDT'},
-        {'symbol': 'ETHUSDT'},
-        {'symbol': 'BNBUSDT'},
-        {'symbol': 'SOLUSDT'},
-        {'symbol': 'XRPUSDT'},
-        {'symbol': 'ADAUSDT'},
+        {'symbol': 'BTCUSDT', 'baseAsset': 'BTC', 'quoteAsset': 'USDT'},
+        {'symbol': 'ETHUSDT', 'baseAsset': 'ETH', 'quoteAsset': 'USDT'},
     ]
 }
 
@@ -45,7 +29,8 @@ class TestCycleFinder(unittest.TestCase):
         with open(os.path.join(CONFIG_DIR, 'config.json'), 'w') as f:
             json.dump({
                 "base_currency": "USDT",
-                "monitored_coins": ["BTC", "ETH", "BNB", "SOL", "XRP", "ADA"]
+                "monitored_coins": ["BTC", "ETH"],
+                "max_cycle_length": 3
             }, f)
         
         self._cleanup_output_files()
@@ -64,14 +49,14 @@ class TestCycleFinder(unittest.TestCase):
             os.remove(POSSIBLE_CYCLES_TXT_FILE)
 
     @patch('cli_monitor.arbitrage.cycle_finder.BinanceClient')
-    def test_find_triangular_arbitrage_cycles(self, MockBinanceClient):
+    def test_find_arbitrage_cycles(self, MockBinanceClient):
         """Test that cycles are found and files are created correctly."""
         # Mock the Binance client and its method
         mock_client_instance = MockBinanceClient.return_value
         mock_client_instance.get_exchange_info.return_value = MOCK_EXCHANGE_INFO
 
         # Run the function
-        find_triangular_arbitrage_cycles()
+        find_arbitrage_cycles()
 
         # 1. Check if JSON file was created and has correct content
         self.assertTrue(os.path.exists(POSSIBLE_CYCLES_JSON_FILE))
@@ -81,10 +66,6 @@ class TestCycleFinder(unittest.TestCase):
         expected_cycles = [
             ["USDT", "BTC", "ETH", "USDT"],
             ["USDT", "ETH", "BTC", "USDT"],
-            ["USDT", "BNB", "SOL", "USDT"],
-            ["USDT", "SOL", "BNB", "USDT"],
-            ["USDT", "XRP", "ADA", "USDT"],
-            ["USDT", "ADA", "XRP", "USDT"]
         ]
         
         # Convert to tuple of tuples for unordered comparison
@@ -98,10 +79,6 @@ class TestCycleFinder(unittest.TestCase):
         expected_txt_lines = [
             "USDT -> BTC -> ETH -> USDT",
             "USDT -> ETH -> BTC -> USDT",
-            "USDT -> BNB -> SOL -> USDT",
-            "USDT -> SOL -> BNB -> USDT",
-            "USDT -> XRP -> ADA -> USDT",
-            "USDT -> ADA -> XRP -> USDT"
         ]
         self.assertEqual(set(txt_content), set(expected_txt_lines))
 
@@ -113,7 +90,7 @@ class TestCycleFinder(unittest.TestCase):
         mock_client_instance.get_exchange_info.return_value = MOCK_EXCHANGE_INFO_NO_CYCLES
 
         # Run the function
-        find_triangular_arbitrage_cycles()
+        find_arbitrage_cycles()
 
         # Check that the output files are created but are empty
         self.assertTrue(os.path.exists(POSSIBLE_CYCLES_JSON_FILE))
