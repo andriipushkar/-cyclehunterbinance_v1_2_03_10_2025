@@ -1,6 +1,6 @@
 import pytest
 from unittest.mock import patch, MagicMock, call
-from cli_monitor.balance import commands
+from cli_monitor.balance.commands import BalanceMonitor
 from cli_monitor.common import utils
 
 @patch('cli_monitor.balance.commands.BinanceClient')
@@ -15,7 +15,8 @@ def test_get_balances(mock_open, mock_format_balances, mock_save_to_json, mock_b
     mock_instance.get_earn_balance.return_value = [{'asset': 'BNB', 'total': '100.0'}]
     mock_instance.get_symbol_price.return_value = 50000.0
 
-    commands.get_balances()
+    monitor = BalanceMonitor()
+    monitor.get_balances()
 
     mock_instance.get_spot_balance.assert_called_once()
     mock_instance.get_futures_balance.assert_called_once()
@@ -34,12 +35,13 @@ def test_get_balances(mock_open, mock_format_balances, mock_save_to_json, mock_b
 
     mock_open.assert_called_with('output/balance_output.txt', 'w')
 
-@patch('cli_monitor.balance.commands._get_and_save_balances')
+@patch('cli_monitor.balance.commands.BalanceMonitor._get_and_save_balances')
 @patch('time.sleep')
 def test_monitor_balances(mock_sleep, mock_get_and_save):
     """Test monitor_balances function."""
     mock_get_and_save.side_effect = KeyboardInterrupt
-    commands.monitor_balances()
+    monitor = BalanceMonitor()
+    monitor.monitor_balances()
     mock_get_and_save.assert_called_once()
 
 def test_format_balances():

@@ -3,6 +3,8 @@ import pytest
 from unittest.mock import patch, MagicMock
 from binance.exceptions import BinanceAPIException
 from cli_monitor.common.binance_client import BinanceClient
+from cli_monitor.common.exceptions import SymbolPriceError
+from decimal import Decimal
 
 @patch('cli_monitor.common.binance_client.Client')
 def test_binance_client_initialization(MockClient):
@@ -52,8 +54,8 @@ def test_get_symbol_price_exception(MockClient):
     mock_response.text = '{"code": -1121, "msg": "Invalid symbol."}'
     mock_client_instance.get_symbol_ticker.side_effect = BinanceAPIException(mock_response, 400, mock_response.text)
     client = BinanceClient()
-    price = client.get_symbol_price('BTC')
-    assert price is None
+    with pytest.raises(SymbolPriceError):
+        client.get_symbol_price('BTC')
 
 @patch('cli_monitor.common.binance_client.Client')
 def test_get_earn_balance(MockClient):
@@ -68,3 +70,32 @@ def test_get_earn_balance(MockClient):
     balances = client.get_earn_balance()
     assert len(balances) == 1
     assert balances[0]['asset'] == 'USDT'
+
+@patch('cli_monitor.common.binance_client.Client')
+def test_get_trade_fees(MockClient):
+    mock_client_instance = MockClient.return_value
+    mock_client_instance.get_trade_fee.return_value = {
+        'tradeFee': [
+            {'symbol': 'BTCUSDT', 'takerCommission': '0.001'},
+            {'symbol': 'ETHUSDT', 'takerCommission': '0.001'}
+        ]
+    }
+    client = BinanceClient()
+    fees = client.get_trade_fees()
+    assert len(fees) == 2
+    assert fees['BTCUSDT'] == Decimal('0.001')
+
+@patch('cli_monitor.common.binance_client.Client')
+def test_get_trade_fee(MockClient):
+    mock_client_instance = MockClient.return_value
+    mock_client_instance.get_trade_fee.return_value = {
+        'tradeFee': [
+            {'symbol': 'BTCUSDT', 'takerCommission': '0.001'}
+        ]
+    }
+    client = BinanceClient()
+    fee = client.get_trade_fee('BTCUSDT')
+    assert fee == Decimal('0.001')
+    # Should be cached
+    fee = client.get_trade_fee('BTCUSDT')
+    mock_client_instance.get_trade_fee.assert_called_once()

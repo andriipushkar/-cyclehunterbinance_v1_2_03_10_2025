@@ -1,17 +1,18 @@
 import logging
+from decimal import Decimal
 from binance.client import Client
 from binance.exceptions import BinanceAPIException, BinanceRequestException
-from .config import API_KEY, API_SECRET
-
-logging.basicConfig(level=logging.INFO)
+from .config import config
+from .exceptions import SymbolPriceError
 
 class BinanceClient:
     """A wrapper for the Binance API client."""
 
     def __init__(self):
         """Initializes the BinanceClient."""
+        self._trade_fees = {}
         try:
-            self.client = Client(API_KEY, API_SECRET)
+            self.client = Client(config.api_key, config.api_secret)
             # Test connectivity
             self.client.ping()
             logging.info("Successfully connected to Binance API.")
@@ -72,7 +73,7 @@ class BinanceClient:
             ticker = self.client.get_symbol_ticker(symbol=f"{asset}USDT")
             return float(ticker['price'])
         except (BinanceAPIException, BinanceRequestException) as e:
-            return None
+            raise SymbolPriceError(f"Could not fetch price for {asset}: {e}") from e
 
     def get_earn_balance(self):
         """
@@ -117,3 +118,49 @@ class BinanceClient:
         except (BinanceAPIException, BinanceRequestException) as e:
             logging.error(f"Error fetching exchange info: {e}")
             return None
+
+    def get_trade_fees(self):
+        """
+        Retrieves all trade fees and caches them.
+
+        Returns:
+            dict: A dictionary of trade fees.
+        """
+        if self._trade_fees:
+            return self._trade_fees
+        try:
+            fees = self.client.get_trade_fee()
+            if fees and 'tradeFee' in fees:
+                for fee in fees['tradeFee']:
+                    self._trade_fees[fee['symbol']] = Decimal(fee['takerCommission'])
+            return self._trade_fees
+        except (BinanceAPIException, BinanceRequestException) as e:
+            logging.error(f"Error fetching trade fees: {e}")
+            return {}
+
+    def get_trade_fee(self, symbol):
+        """
+        Retrieves the trade fee for a specific symbol.
+
+        Args:
+            symbol (str): The symbol to get the trade fee for.
+
+        Returns:
+            Decimal: The trade fee for the symbol, or None if not found.
+        """
+        if not self._trade_fees:
+            self.get_trade_fees()
+        
+        if symbol not in self._trade_fees:
+            try:
+                fees = self.client.get_trade_fee(symbol=symbol)
+                if fees and 'tradeFee' in fees and len(fees['tradeFee']) > 0:
+                    fee = Decimal(fees['tradeFee'][0]['takerCommission'])
+                    self._trade_fees[symbol] = fee
+                    return fee
+                return None
+            except (BinanceAPIException, BinanceRequestException) as e:
+                logging.error(f"Error fetching trade fee for {symbol}: {e}")
+                return None
+
+        return self._trade_fees.get(symbol)

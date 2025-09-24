@@ -2,8 +2,10 @@ import argparse
 import sys
 from .balance import main as balance_main
 from .arbitrage import main as arbitrage_main
+from .common.config import config
 
 def main():
+    config.load_config()
     parser = argparse.ArgumentParser(description="SignalSeeker CLI")
     subparsers = parser.add_subparsers(dest="command", required=True)
 

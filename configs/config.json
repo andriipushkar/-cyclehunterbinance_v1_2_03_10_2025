@@ -1,0 +1,8 @@
+{
+  "base_currency": "USDT",
+  "trading_fee": "0.001",
+  "min_profit_threshold": "-1.00",
+  "max_cycle_length": 4,
+  "monitored_coins": [
+    "BTC", "ETH", "USDT", "BNB"]
+}

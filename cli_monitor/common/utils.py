@@ -16,7 +16,7 @@ def setup_logging():
         logging.root.removeHandler(handler)
 
     logging.basicConfig(
-        level=logging.INFO,
+        level=logging.DEBUG,
         format='%(asctime)s - %(levelname)s - %(message)s',
         handlers=[
             logging.FileHandler(log_file),
@@ -100,3 +100,35 @@ def format_balances(balances):
         output.append("  No earn balances found.")
 
     return "\n".join(output)
+
+
+def structure_cycles_and_get_pairs(cycles_coins, symbols_info):
+    """Structures cycles and gets all unique pairs."""
+    structured_cycles = []
+    all_pairs = set()
+    all_symbols = list(symbols_info)
+
+    for coins in cycles_coins:
+        current_cycle_steps = []
+        all_pairs_in_cycle = []
+        valid_cycle = True
+        for i in range(len(coins) - 1):
+            pair_symbol = f'{coins[i+1]}{coins[i]}' if f'{coins[i+1]}{coins[i]}' in all_symbols else f'{coins[i]}{coins[i+1]}'
+            if pair_symbol not in all_symbols:
+                valid_cycle = False
+                break
+            
+            # Check if the symbol is trading
+            if symbols_info[pair_symbol]['status'] != 'TRADING':
+                valid_cycle = False
+                break
+
+            current_cycle_steps.append({"pair": pair_symbol, "from": coins[i], "to": coins[i+1]})
+            all_pairs_in_cycle.append(pair_symbol)
+
+        if valid_cycle:
+            cycle_info = {"coins": coins, "steps": current_cycle_steps}
+            structured_cycles.append(cycle_info)
+            all_pairs.update(all_pairs_in_cycle)
+            
+    return structured_cycles, all_pairs

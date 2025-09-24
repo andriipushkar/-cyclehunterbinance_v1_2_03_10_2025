@@ -1,78 +1,67 @@
+
 import pytest
-import asyncio
-import json
-from unittest.mock import patch, MagicMock, mock_open
+from unittest.mock import patch, MagicMock, AsyncMock
 from decimal import Decimal
-from cli_monitor.arbitrage.profit_calculator import (
-    get_exchange_info_map,
-    load_cycles_and_map_pairs,
-    calculate_and_log_profit,
-    latest_prices,
-    pair_to_cycles,
-    latest_profits_by_cycle
-)
-from cli_monitor.arbitrage import constants
+from cli_monitor.arbitrage.profit_calculator import ProfitCalculator
+from cli_monitor.arbitrage.cycle import Cycle
 
-MOCK_SYMBOLS_INFO = {
-    'BTCUSDT': {'symbol': 'BTCUSDT', 'baseAsset': 'BTC', 'quoteAsset': 'USDT'},
-    'ETHUSDT': {'symbol': 'ETHUSDT', 'baseAsset': 'ETH', 'quoteAsset': 'USDT'},
-    'ETHBTC': {'symbol': 'ETHBTC', 'baseAsset': 'ETH', 'quoteAsset': 'BTC'},
-}
+@pytest.fixture
+def mock_binance_client():
+    with patch('cli_monitor.common.binance_client.BinanceClient') as mock_client:
+        yield mock_client
 
-MOCK_CYCLES_COINS = [
-    ["USDT", "BTC", "ETH", "USDT"]
-]
+@pytest.fixture
+def mock_config():
+    with patch('cli_monitor.common.config.config') as mock_config:
+        mock_config.min_profit_threshold = '0.1'
+        yield mock_config
 
-@pytest.fixture(autouse=True)
-def clear_globals():
-    """Clears global dictionaries before each test."""
-    latest_prices.clear()
-    pair_to_cycles.clear()
-    latest_profits_by_cycle.clear()
-
-@patch('cli_monitor.arbitrage.profit_calculator.BinanceClient')
-def test_get_exchange_info_map(MockBinanceClient):
-    mock_client = MockBinanceClient.return_value
-    mock_client.get_exchange_info.return_value = {'symbols': [{'symbol': 'BTCUSDT'}]}
-    
-    result = get_exchange_info_map()
-    
-    assert 'BTCUSDT' in result
-    assert result['BTCUSDT']['symbol'] == 'BTCUSDT'
-
-@patch('os.path.exists', return_value=True)
-@patch('builtins.open', new_callable=mock_open, read_data=json.dumps(MOCK_CYCLES_COINS))
-def test_load_cycles_and_map_pairs(mock_file, mock_exists):
-    structured_cycles, all_trade_pairs = load_cycles_and_map_pairs(MOCK_SYMBOLS_INFO)
-    
-    assert len(structured_cycles) == 1
-    assert "USDT -> BTC -> ETH -> USDT" in [ ' -> '.join(c['coins']) for c in structured_cycles]
-    assert all_trade_pairs == {'BTCUSDT', 'ETHBTC', 'ETHUSDT'}
-    assert 'BTCUSDT' in pair_to_cycles
-    assert 'ETHBTC' in pair_to_cycles
-    assert 'ETHUSDT' in pair_to_cycles
+@pytest.fixture
+def profit_calculator(mock_config, mock_binance_client):
+    return ProfitCalculator()
 
 @pytest.mark.asyncio
-@patch('builtins.open', new_callable=mock_open)
-async def test_calculate_and_log_profit(mock_file):
-    cycle_info = {
-        "coins": ["USDT", "BTC", "ETH", "USDT"],
-        "steps": [
-            {"pair": "BTCUSDT", "from": "USDT", "to": "BTC"},
-            {"pair": "ETHBTC", "from": "BTC", "to": "ETH"},
-            {"pair": "ETHUSDT", "from": "ETH", "to": "USDT"}
-        ]
-    }
+async def test_calculate_and_log_profit_positive(profit_calculator):
+    cycle = Cycle(['USDT', 'BTC', 'USDT'], [{'pair': 'BTCUSDT', 'from': 'USDT', 'to': 'BTC'}, {'pair': 'BTCUSDT', 'from': 'BTC', 'to': 'USDT'}])
+    symbols_info = {'BTCUSDT': {'symbol': 'BTCUSDT'}}
+    trade_fees = {'BTCUSDT': Decimal('0.001')}
+    min_profit_threshold = Decimal('0.1')
+    profit_calculator.latest_prices = {'BTCUSDT': {'b': '10000', 'a': '10001'}}
     
-    latest_prices['BTCUSDT'] = {'b': '50000', 'a': '50001'}
-    latest_prices['ETHBTC'] = {'b': '0.05', 'a': '0.0505'}
-    latest_prices['ETHUSDT'] = {'b': '2550', 'a': '2551'}
+    with patch.object(cycle, 'calculate_profit', return_value=Decimal('0.2')) as mock_calculate_profit,
+         patch.object(profit_calculator, '_log_profitable_opportunity') as mock_log_profitable_opportunity:
+        
+        await profit_calculator.calculate_and_log_profit(cycle, symbols_info, trade_fees, min_profit_threshold)
+        
+        mock_calculate_profit.assert_called_once_with(profit_calculator.latest_prices, symbols_info, trade_fees)
+        mock_log_profitable_opportunity.assert_called_once()
+
+@pytest.mark.asyncio
+async def test_calculate_and_log_profit_negative(profit_calculator):
+    cycle = Cycle(['USDT', 'BTC', 'USDT'], [{'pair': 'BTCUSDT', 'from': 'USDT', 'to': 'BTC'}, {'pair': 'BTCUSDT', 'from': 'BTC', 'to': 'USDT'}])
+    symbols_info = {'BTCUSDT': {'symbol': 'BTCUSDT'}}
+    trade_fees = {'BTCUSDT': Decimal('0.001')}
+    min_profit_threshold = Decimal('0.1')
+    profit_calculator.latest_prices = {'BTCUSDT': {'b': '10000', 'a': '10001'}}
     
-    trading_fee = Decimal('0.001')
-    min_profit_threshold = Decimal('0.0')
+    with patch.object(cycle, 'calculate_profit', return_value=Decimal('-0.1')) as mock_calculate_profit,
+         patch.object(profit_calculator, '_log_profitable_opportunity') as mock_log_profitable_opportunity:
+        
+        await profit_calculator.calculate_and_log_profit(cycle, symbols_info, trade_fees, min_profit_threshold)
+        
+        mock_calculate_profit.assert_called_once_with(profit_calculator.latest_prices, symbols_info, trade_fees)
+        mock_log_profitable_opportunity.assert_not_called()
+
+@pytest.mark.asyncio
+async def test_handle_websocket_message(profit_calculator):
+    message = '{"data": {"s": "BTCUSDT", "b": "10000", "a": "10001"}}'
+    symbols_info = {}
+    trade_fees = {}
+    min_profit_threshold = Decimal('0.1')
+    profit_calculator.pair_to_cycles = {'BTCUSDT': [MagicMock()]}
     
-    await calculate_and_log_profit(cycle_info, MOCK_SYMBOLS_INFO, trading_fee, min_profit_threshold)
-    
-    cycle_str = ' -> '.join(cycle_info['coins'])
-    assert cycle_str in latest_profits_by_cycle
-    assert latest_profits_by_cycle[cycle_str] > 0
+    with patch.object(profit_calculator, 'calculate_and_log_profit', new_callable=AsyncMock) as mock_calculate_and_log_profit:
+        await profit_calculator._handle_websocket_message(message, symbols_info, trade_fees, min_profit_threshold)
+        
+        assert 'BTCUSDT' in profit_calculator.latest_prices
+        mock_calculate_and_log_profit.assert_called_once()

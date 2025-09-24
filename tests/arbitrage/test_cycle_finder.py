@@ -1,107 +1,67 @@
-import os
-import json
-import unittest
+import pytest
 from unittest.mock import patch, MagicMock
-from cli_monitor.arbitrage.cycle_finder import find_arbitrage_cycles, CONFIG_DIR, POSSIBLE_CYCLES_JSON_FILE, POSSIBLE_CYCLES_TXT_FILE
+from cli_monitor.arbitrage.cycle_finder import CycleFinder
 
-# Mock data similar to Binance API response
-MOCK_EXCHANGE_INFO = {
-    'symbols': [
-        {'symbol': 'BTCUSDT', 'baseAsset': 'BTC', 'quoteAsset': 'USDT'},
-        {'symbol': 'ETHUSDT', 'baseAsset': 'ETH', 'quoteAsset': 'USDT'},
-        {'symbol': 'ETHBTC', 'baseAsset': 'ETH', 'quoteAsset': 'BTC'}, # Cycle: USDT -> BTC -> ETH -> USDT
-    ]
-}
+@pytest.fixture
+def mock_binance_client():
+    with patch('cli_monitor.common.binance_client.BinanceClient') as mock_client:
+        yield mock_client
 
-MOCK_EXCHANGE_INFO_NO_CYCLES = {
-    'symbols': [
-        {'symbol': 'BTCUSDT', 'baseAsset': 'BTC', 'quoteAsset': 'USDT'},
-        {'symbol': 'ETHUSDT', 'baseAsset': 'ETH', 'quoteAsset': 'USDT'},
-    ]
-}
+@pytest.fixture
+def mock_config():
+    with patch('cli_monitor.common.config.config') as mock_config:
+        mock_config.base_currency = 'USDT'
+        mock_config.monitored_coins = ['BTC', 'ETH', 'BNB']
+        mock_config.max_cycle_length = 4
+        yield mock_config
 
-class TestCycleFinder(unittest.TestCase):
-
-    def setUp(self):
-        """Set up test environment."""
-        # Create dummy config files
-        os.makedirs(CONFIG_DIR, exist_ok=True)
-        with open(os.path.join(CONFIG_DIR, 'config.json'), 'w') as f:
-            json.dump({
-                "base_currency": "USDT",
-                "monitored_coins": ["BTC", "ETH"],
-                "max_cycle_length": 3
-            }, f)
-        
-        self._cleanup_output_files()
-
-    def tearDown(self):
-        """Clean up after tests."""
-        self._cleanup_output_files()
-        os.remove(os.path.join(CONFIG_DIR, 'config.json'))
-        if not os.listdir(CONFIG_DIR):
-            os.rmdir(CONFIG_DIR)
-
-    def _cleanup_output_files(self):
-        if os.path.exists(POSSIBLE_CYCLES_JSON_FILE):
-            os.remove(POSSIBLE_CYCLES_JSON_FILE)
-        if os.path.exists(POSSIBLE_CYCLES_TXT_FILE):
-            os.remove(POSSIBLE_CYCLES_TXT_FILE)
-
-    @patch('cli_monitor.arbitrage.cycle_finder.BinanceClient')
-    def test_find_arbitrage_cycles(self, MockBinanceClient):
-        """Test that cycles are found and files are created correctly."""
-        # Mock the Binance client and its method
-        mock_client_instance = MockBinanceClient.return_value
-        mock_client_instance.get_exchange_info.return_value = MOCK_EXCHANGE_INFO
-
-        # Run the function
-        find_arbitrage_cycles()
-
-        # 1. Check if JSON file was created and has correct content
-        self.assertTrue(os.path.exists(POSSIBLE_CYCLES_JSON_FILE))
-        with open(POSSIBLE_CYCLES_JSON_FILE, 'r') as f:
-            cycles_data = json.load(f)
-        
-        expected_cycles = [
-            ["USDT", "BTC", "ETH", "USDT"],
-            ["USDT", "ETH", "BTC", "USDT"],
+def test_get_trading_pairs(mock_config, mock_binance_client):
+    finder = CycleFinder()
+    finder.exchange_info = {
+        'symbols': [
+            {'baseAsset': 'BTC', 'quoteAsset': 'USDT'},
+            {'baseAsset': 'ETH', 'quoteAsset': 'BTC'},
+            {'baseAsset': 'BNB', 'quoteAsset': 'USDT'},
         ]
-        
-        # Convert to tuple of tuples for unordered comparison
-        self.assertEqual(set(map(tuple, cycles_data)), set(map(tuple, expected_cycles)))
+    }
+    pairs = finder._get_trading_pairs()
+    assert 'USDT' in pairs
+    assert 'BTC' in pairs
+    assert 'ETH' in pairs
+    assert 'BNB' in pairs
+    assert 'BTC' in pairs['USDT']
+    assert 'USDT' in pairs['BTC']
+    assert 'ETH' in pairs['BTC']
 
-        # 2. Check if TXT file was created and has correct content
-        self.assertTrue(os.path.exists(POSSIBLE_CYCLES_TXT_FILE))
-        with open(POSSIBLE_CYCLES_TXT_FILE, 'r') as f:
-            txt_content = f.read().strip().split('\n')
-        
-        expected_txt_lines = [
-            "USDT -> BTC -> ETH -> USDT",
-            "USDT -> ETH -> BTC -> USDT",
+def test_find_cycles_dfs(mock_config, mock_binance_client):
+    finder = CycleFinder()
+    graph = {
+        'USDT': ['BTC', 'BNB'],
+        'BTC': ['USDT', 'ETH'],
+        'ETH': ['BTC'],
+        'BNB': ['USDT']
+    }
+    cycles = finder._find_cycles_dfs(graph, 'USDT', 3)
+    assert len(cycles) == 1
+    assert cycles[0] == ['USDT', 'BTC', 'ETH', 'USDT']
+
+@patch('builtins.open', new_callable=MagicMock)
+def test_save_cycles(mock_open, mock_config, mock_binance_client):
+    finder = CycleFinder()
+    cycles = [['USDT', 'BTC', 'ETH', 'USDT']]
+    finder._save_cycles(cycles)
+    mock_open.assert_any_call('configs/possible_cycles.json', 'w')
+    mock_open.assert_any_call('configs/possible_cycles.txt', 'w')
+
+@patch('cli_monitor.arbitrage.cycle_finder.CycleFinder._save_cycles')
+def test_run(mock_save_cycles, mock_config, mock_binance_client):
+    finder = CycleFinder()
+    finder.client.get_exchange_info.return_value = {
+        'symbols': [
+            {'baseAsset': 'BTC', 'quoteAsset': 'USDT'},
+            {'baseAsset': 'ETH', 'quoteAsset': 'BTC'},
+            {'baseAsset': 'BNB', 'quoteAsset': 'USDT'},
         ]
-        self.assertEqual(set(txt_content), set(expected_txt_lines))
-
-    @patch('cli_monitor.arbitrage.cycle_finder.BinanceClient')
-    def test_no_cycles_found(self, MockBinanceClient):
-        """Test that no cycles are found when no valid pairs exist."""
-        # Mock the Binance client and its method
-        mock_client_instance = MockBinanceClient.return_value
-        mock_client_instance.get_exchange_info.return_value = MOCK_EXCHANGE_INFO_NO_CYCLES
-
-        # Run the function
-        find_arbitrage_cycles()
-
-        # Check that the output files are created but are empty
-        self.assertTrue(os.path.exists(POSSIBLE_CYCLES_JSON_FILE))
-        with open(POSSIBLE_CYCLES_JSON_FILE, 'r') as f:
-            cycles_data = json.load(f)
-        self.assertEqual(cycles_data, [])
-
-        self.assertTrue(os.path.exists(POSSIBLE_CYCLES_TXT_FILE))
-        with open(POSSIBLE_CYCLES_TXT_FILE, 'r') as f:
-            txt_content = f.read()
-        self.assertEqual(txt_content, "")
-
-if __name__ == '__main__':
-    unittest.main()
+    }
+    finder.run()
+    mock_save_cycles.assert_called_once()

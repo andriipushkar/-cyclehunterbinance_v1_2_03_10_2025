@@ -1,0 +1,12 @@
+USDT -> BNB -> ETH -> USDT
+USDT -> BNB -> ETH -> BTC -> USDT
+USDT -> BNB -> BTC -> USDT
+USDT -> BNB -> BTC -> ETH -> USDT
+USDT -> ETH -> BNB -> USDT
+USDT -> ETH -> BNB -> BTC -> USDT
+USDT -> ETH -> BTC -> USDT
+USDT -> ETH -> BTC -> BNB -> USDT
+USDT -> BTC -> BNB -> USDT
+USDT -> BTC -> BNB -> ETH -> USDT
+USDT -> BTC -> ETH -> USDT
+USDT -> BTC -> ETH -> BNB -> USDT
