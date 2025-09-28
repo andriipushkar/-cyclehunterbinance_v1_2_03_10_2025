@@ -1,7 +1,14 @@
+"""
+Цей модуль визначає кастомні класи винятків для проекту.
+
+Використання власних винятків дозволяє більш точно обробляти помилки,
+специфічні для логіки додатку.
+"""
+
 class BinanceClientException(Exception):
-    """Base exception for BinanceClient errors."""
+    """Базовий виняток для помилок, пов'язаних з `BinanceClient`."""
     pass
 
 class SymbolPriceError(BinanceClientException):
-    """Raised when the symbol price cannot be fetched."""
+    """Виняток, що виникає, коли не вдається отримати ціну для торгової пари."""
     pass

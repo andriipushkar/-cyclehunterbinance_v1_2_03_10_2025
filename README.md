@@ -76,6 +76,22 @@ BINANCE_API_SECRET=your_api_secret_here
   python3 -m cli_monitor arbitrage backtest 2023-01-01 2023-01-31
   ```
 
+### Інструменти та автоматизація
+
+- **Згенерувати "білий список" монет:**
+  ```bash
+  python3 -m cli_monitor arbitrage generate-whitelist
+  ```
+- **Згенерувати "чорний список" монет:**
+  ```bash
+  python3 -m cli_monitor arbitrage generate-blacklist
+  ```
+- **Запустити автоматичного бота:**
+  ```bash
+  python3 -m cli_monitor arbitrage start-bot
+  ```
+
+
 ## Структура проекту
 
 ```

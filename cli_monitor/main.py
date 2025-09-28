@@ -1,3 +1,13 @@
+"""
+Це головний модуль і точка входу для всього CLI-додатку.
+
+Він відповідає за:
+- Ініціалізацію конфігурації.
+- Створення головного парсера аргументів командного рядка.
+- Додавання підкоманд (`balance`, `arbitrage`) та їхніх аргументів.
+- Визначення, яку підкоманду запустити на основі вводу користувача.
+"""
+
 import argparse
 import sys
 from .balance import main as balance_main
@@ -5,23 +15,33 @@ from .arbitrage import main as arbitrage_main
 from .common.config import config
 
 def main():
+    """
+    Головна функція, що виконується при запуску `python3 -m cli_monitor`.
+    """
+    # Завантажуємо конфігурацію з файлів .env та config.json
     config.load_config()
-    parser = argparse.ArgumentParser(description="SignalSeeker CLI")
+    
+    # Створюємо головний парсер
+    parser = argparse.ArgumentParser(description="CLI-інструмент для моніторингу та арбітражу на Binance")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    balance_parser = subparsers.add_parser("balance", help="Balance monitor commands")
+    # Додаємо підкоманду "balance" та її аргументи з модуля balance.main
+    balance_parser = subparsers.add_parser("balance", help="Команди для моніторингу балансу")
     balance_main.add_arguments(balance_parser)
 
-    arbitrage_parser = subparsers.add_parser("arbitrage", help="Arbitrage tools commands")
+    # Додаємо підкоманду "arbitrage" та її аргументи з модуля arbitrage.main
+    arbitrage_parser = subparsers.add_parser("arbitrage", help="Команди для інструментів арбітражу")
     arbitrage_main.add_arguments(arbitrage_parser)
 
-    # We need to handle the case where no arguments are provided
+    # Якщо програма запущена без аргументів, виводимо допомогу
     if len(sys.argv) < 2:
         parser.print_help(sys.stderr)
         sys.exit(1)
         
+    # Парсимо аргументи, передані користувачем
     args = parser.parse_args()
 
+    # Викликаємо відповідний обробник для вибраної команди
     if args.command == "balance":
         balance_main.run(args)
     elif args.command == "arbitrage":

@@ -1,3 +1,11 @@
+"""
+Цей модуль надає клас-обгортку (`BinanceClient`) для взаємодії з API біржі Binance.
+
+Він інкапсулює логіку для виконання основних запитів до API, таких як
+отримання балансів, цін, інформації про біржу та торгових комісій,
+а також обробку можливих помилок.
+"""
+
 import logging
 from decimal import Decimal
 from binance.client import Client
@@ -6,45 +14,61 @@ from .config import config
 from .exceptions import SymbolPriceError
 
 class BinanceClient:
-    """A wrapper for the Binance API client."""
+    """Клас-обгортка для клієнта API Binance."""
 
     def __init__(self):
-        """Initializes the BinanceClient."""
+        """
+        Ініціалізує клієнт Binance.
+
+        Використовує API ключ та секрет з конфігурації для створення екземпляра
+        клієнта. Також виконує `ping` до сервера Binance для перевірки
+        з'єднання та валідності ключів.
+
+        Raises:
+            BinanceAPIException: Якщо виникає помилка з боку API Binance.
+            BinanceRequestException: Якщо виникає помилка під час запиту.
+        """
+        # Кеш для зберігання торгових комісій, щоб уникнути повторних запитів
         self._trade_fees = {}
         try:
             self.client = Client(config.api_key, config.api_secret)
-            # Test connectivity
+            # Перевірка з'єднання
             self.client.ping()
-            logging.info("Successfully connected to Binance API.")
+            logging.info("Успішно підключено до API Binance.")
         except (BinanceAPIException, BinanceRequestException) as e:
-            logging.error(f"Error connecting to Binance API: {e}")
+            logging.error(f"Помилка підключення до API Binance: {e}")
+            # Перевикликаємо виняток, щоб програма, яка використовує клієнт, знала про помилку
             raise
 
     def get_spot_balance(self):
         """
-        Retrieves the spot account balance.
+        Отримує баланс спотового гаманця.
 
         Returns:
-            list: A list of dictionaries representing the spot balances.
+            list: Список словників, що представляють баланси активів.
+                  Повертає тільки активи з балансом більше нуля.
+                  Приклад: [{"asset": "BTC", "total": "0.1"}]
         """
         try:
             account = self.client.get_account()
             balances = account.get('balances', [])
+            # Фільтруємо активи, залишаючи тільки ті, що мають позитивний баланс
             return [
                 {"asset": b["asset"], "total": b["free"]}
                 for b in balances
                 if float(b["free"]) > 0
             ]
         except (BinanceAPIException, BinanceRequestException) as e:
-            logging.error(f"Error fetching spot balance: {e}")
+            logging.error(f"Помилка отримання спотового балансу: {e}")
             return []
 
     def get_futures_balance(self):
         """
-        Retrieves the futures account balance.
+        Отримує баланс ф'ючерсного гаманця.
 
         Returns:
-            list: A list of dictionaries representing the futures balances.
+            list: Список словників, що представляють баланси активів.
+                  Приклад: [{"asset": "USDT", "balance": "1000"}]
         """
         try:
             account = self.client.futures_account_balance()
@@ -54,78 +78,103 @@ class BinanceClient:
                 if float(b["balance"]) > 0
             ]
         except (BinanceAPIException, BinanceRequestException) as e:
-            logging.error(f"Error fetching futures balance: {e}")
+            logging.error(f"Помилка отримання ф'ючерсного балансу: {e}")
             return []
 
     def get_symbol_price(self, asset):
         """
-        Retrieves the price of a symbol in USDT.
+        Отримує ціну активу відносно USDT.
 
         Args:
-            asset (str): The asset to get the price for.
+            asset (str): Назва активу (наприклад, "BTC").
 
         Returns:
-            float: The price of the asset in USDT, or None if not found.
+            float: Ціна активу в USDT.
+
+        Raises:
+            SymbolPriceError: Якщо не вдається отримати ціну для вказаного активу.
         """
+        # Для стейблкоїнів ціна завжди приблизно 1.0 USDT
         if asset in ['USDT', 'USDC', 'BUSD', 'TUSD', 'DAI', 'PAX', 'HUSD']:
             return 1.0
         try:
+            # Формуємо тікер (наприклад, "BTCUSDT") і запитуємо ціну
             ticker = self.client.get_symbol_ticker(symbol=f"{asset}USDT")
             return float(ticker['price'])
         except (BinanceAPIException, BinanceRequestException) as e:
-            raise SymbolPriceError(f"Could not fetch price for {asset}: {e}") from e
+            raise SymbolPriceError(f"Не вдалося отримати ціну для {asset}: {e}") from e
 
     def get_earn_balance(self):
         """
-        Retrieves the earn account balance.
+        Отримує баланс гаманця "Earn" (Simple Earn).
+
+        Збирає інформацію з гнучких (Flexible) та заблокованих (Locked) позицій.
 
         Returns:
-            list: A list of dictionaries representing the earn balances.
+            list: Список словників, що представляють баланси в Earn.
+                  Приклад: [{"asset": "BNB", "total": "10.5"}]
         """
         earn_balances = []
         try:
+            # Отримуємо позиції з гнучким доходом
             flexible_positions = self.client.get_simple_earn_flexible_product_position()
             if flexible_positions and 'rows' in flexible_positions:
                 for position in flexible_positions['rows']:
                     earn_balances.append({"asset": position['asset'], "total": position['totalAmount']})
 
+            # Отримуємо позиції з фіксованим доходом
             locked_positions = self.client.get_simple_earn_locked_product_position()
             if locked_positions and 'rows' in locked_positions:
                 for position in locked_positions['rows']:
-                    # Check if the asset already exists in earn_balances to sum them up
+                    # Перевіряємо, чи такий актив вже є у списку, щоб додати суму
                     found = False
                     for balance in earn_balances:
                         if balance['asset'] == position['asset']:
                             balance['total'] = str(float(balance['total']) + float(position['amount']))
                             found = True
                             break
+                    # Якщо активу немає, додаємо його
                     if not found:
                         earn_balances.append({"asset": position['asset'], "total": position['amount']})
             return earn_balances
         except (BinanceAPIException, BinanceRequestException) as e:
-            logging.error(f"Could not retrieve earn balance: {e}")
+            logging.error(f"Не вдалося отримати баланс Earn: {e}")
             return []
 
     def get_exchange_info(self):
         """
-        Retrieves the exchange information.
+        Отримує загальну інформацію про біржу (ліміти, торгові пари тощо).
 
         Returns:
-            dict: A dictionary containing the exchange information.
+            dict: Словник з повною інформацією про біржу.
         """
         try:
             return self.client.get_exchange_info()
         except (BinanceAPIException, BinanceRequestException) as e:
-            logging.error(f"Error fetching exchange info: {e}")
+            logging.error(f"Помилка отримання інформації про біржу: {e}")
             return None
+
+    def get_24h_ticker(self):
+        """
+        Отримує статистику цін за останні 24 години для всіх пар.
+
+        Returns:
+            list: Список словників зі статистикою для кожної торгової пари.
+        """
+        try:
+            return self.client.get_ticker()
+        except (BinanceAPIException, BinanceRequestException) as e:
+            logging.error(f"Помилка отримання 24-годинного тікера: {e}")
+            return []
 
     def get_trade_fees(self):
         """
-        Retrieves all trade fees and caches them.
+        Отримує торгові комісії для всіх пар і кешує їх.
 
         Returns:
-            dict: A dictionary of trade fees.
+            dict: Словник, де ключ - символ пари, а значення - комісія тейкера.
         """
+        # Якщо комісії вже закешовані, повертаємо їх
         if self._trade_fees:
             return self._trade_fees
         try:
@@ -135,22 +184,27 @@ class BinanceClient:
                     self._trade_fees[fee['symbol']] = Decimal(fee['takerCommission'])
             return self._trade_fees
         except (BinanceAPIException, BinanceRequestException) as e:
-            logging.error(f"Error fetching trade fees: {e}")
+            logging.error(f"Помилка отримання торгових комісій: {e}")
             return {}
 
     def get_trade_fee(self, symbol):
         """
-        Retrieves the trade fee for a specific symbol.
+        Отримує торгову комісію для конкретної торгової пари.
+
+        Якщо комісії ще не завантажені, спочатку завантажує їх усі.
+        Якщо комісія для конкретної пари не знайдена, робить окремий запит.
 
         Args:
-            symbol (str): The symbol to get the trade fee for.
+            symbol (str): Символ торгової пари (наприклад, "BTCUSDT").
 
         Returns:
-            Decimal: The trade fee for the symbol, or None if not found.
+            Decimal: Розмір комісії тейкера або None, якщо не знайдено.
         """
+        # Завантажуємо всі комісії, якщо кеш порожній
         if not self._trade_fees:
             self.get_trade_fees()
         
+        # Якщо комісії для символу немає в кеші, робимо окремий запит
         if symbol not in self._trade_fees:
             try:
                 fees = self.client.get_trade_fee(symbol=symbol)
@@ -160,7 +214,7 @@ class BinanceClient:
                     return fee
                 return None
             except (BinanceAPIException, BinanceRequestException) as e:
-                logging.error(f"Error fetching trade fee for {symbol}: {e}")
+                logging.error(f"Помилка отримання комісії для {symbol}: {e}")
                 return None
 
         return self._trade_fees.get(symbol)
