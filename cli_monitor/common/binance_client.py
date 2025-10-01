@@ -167,6 +167,25 @@ class BinanceClient:
             logging.error(f"Помилка отримання 24-годинного тікера: {e}")
             return []
 
+    def get_tickers_for_symbols(self, symbols):
+        """
+        Отримує статистику цін за останні 24 години для списку пар.
+
+        Args:
+            symbols (list): Список символів (наприклад, ["BTCUSDT", "ETHUSDT"]).
+
+        Returns:
+            list: Список словників зі статистикою для кожної торгової пари.
+        """
+        tickers = []
+        try:
+            for symbol in symbols:
+                tickers.append(self.client.get_ticker(symbol=symbol))
+            return tickers
+        except (BinanceAPIException, BinanceRequestException) as e:
+            logging.error(f"Помилка отримання тікерів для символів: {e}")
+            return []
+
     def get_trade_fees(self):
         """
         Отримує торгові комісії для всіх пар і кешує їх.

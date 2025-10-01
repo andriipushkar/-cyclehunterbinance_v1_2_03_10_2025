@@ -36,6 +36,7 @@ class Config:
         self.initial_investment_usd = Decimal('15.0')
         self.trading_fee = Decimal('0.001')
         self.min_profit_threshold = Decimal('0.0')
+        self.min_trade_volume_usd = 100000
         self.max_cycle_length = 3
         self.monitored_coins = []
         self.whitelist_base_coins = []
@@ -66,6 +67,7 @@ class Config:
         self.initial_investment_usd = Decimal(config_data.get('initial_investment_usd', self.initial_investment_usd))
         self.trading_fee = Decimal(config_data.get('trading_fee', self.trading_fee))
         self.min_profit_threshold = Decimal(config_data.get('min_profit_threshold', self.min_profit_threshold))
+        self.min_trade_volume_usd = config_data.get('min_trade_volume_usd', self.min_trade_volume_usd)
         self.max_cycle_length = config_data.get('max_cycle_length', self.max_cycle_length)
         self.monitored_coins = config_data.get('monitored_coins', self.monitored_coins)
         self.whitelist_base_coins = config_data.get('whitelist_base_coins', self.whitelist_base_coins)

@@ -3,6 +3,7 @@
   "initial_investment_usd": 15,
   "trading_fee": "0.001",
   "min_profit_threshold": "0.50",
+  "min_trade_volume_usd": 100000,
   "max_cycle_length": 4,
   "monitored_coins": [
     "BTC", "ETH", "USDT", "XRP", "BNB", "SOL", "USDC", "DOGE", "STETH", "TRX"

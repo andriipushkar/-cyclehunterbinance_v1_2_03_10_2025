@@ -29,6 +29,7 @@ class TradeExecutor:
         """Ініціалізує екзекутор."""
         self.client = client
         self.initial_investment = Decimal(config.initial_investment_usd)
+        self.min_volume_threshold = Decimal(config.min_trade_volume_usd)
         self.exchange_info = {s['symbol']: s for s in self.client.get_exchange_info()['symbols']}
 
     async def _log_to_csv(self, cycle_str, profit_pct, initial_amount, final_amount, initial_asset, final_asset):
@@ -79,6 +80,23 @@ class TradeExecutor:
         cycle = profitable_cycle['cycle']
         profit_pct = profitable_cycle['profit_pct']
         prices = profitable_cycle['prices']
+
+        # --- Перевірка ліквідності ---
+        pairs_in_cycle = [step['pair'] for step in cycle.steps]
+        tickers = await asyncio.to_thread(self.client.get_tickers_for_symbols, pairs_in_cycle)
+
+        if not tickers or len(tickers) != len(pairs_in_cycle):
+            logging.warning(f"[LIQUIDITY CHECK] Не вдалося отримати дані тікера для циклу {cycle}. Цикл пропущено.")
+            return
+
+        for ticker in tickers:
+            volume = Decimal(ticker.get('quoteVolume', '0'))
+            if volume < self.min_volume_threshold:
+                logging.warning(f"[LIQUIDITY CHECK] Пара {ticker['symbol']} має недостатній обсяг торгів (${volume:,.2f}). Поріг: ${self.min_volume_threshold:,.2f}. Цикл {cycle} пропущено.")
+                return
+        
+        logging.info(f"[LIQUIDITY CHECK] Усі пари в циклі {cycle} пройшли перевірку на ліквідність.")
+        # --- Кінець перевірки ліквідності ---
         
         logging.info("="*50)
         logging.info(f"[DRY RUN] ОТРИМАНО ПРИБУТКОВИЙ ЦИКЛ: {cycle} | Прибуток: {profit_pct:.4f}%")
