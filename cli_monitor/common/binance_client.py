@@ -218,3 +218,50 @@ class BinanceClient:
                 return None
 
         return self._trade_fees.get(symbol)
+
+    def create_market_order(self, symbol, side, quantity, dry_run=True):
+        """
+        Створює ринковий ордер (Market Order).
+
+        Args:
+            symbol (str): Символ пари (наприклад, "BTCUSDT").
+            side (str): 'BUY' або 'SELL'.
+            quantity (Decimal): Кількість для купівлі/продажу.
+            dry_run (bool): Якщо True, ордер не буде відправлено, лише залоговано.
+
+        Returns:
+            dict: Результат виконання ордера (симуляція для dry_run).
+        """
+        logging.info(f"[DRY RUN] Спроба створити ордер: {side} {quantity} {symbol}")
+        
+        if dry_run:
+            logging.info("[DRY RUN] Ордер не відправлено.")
+            # Симулюємо успішну відповідь від Binance
+            return {
+                "symbol": symbol,
+                "orderId": "DRY_RUN_ORDER",
+                "status": "FILLED",
+                "side": side,
+                "type": "MARKET",
+                "executedQty": str(quantity),
+                "cummulativeQuoteQty": "DRY_RUN_TOTAL",
+            }
+
+        # --- ЛОГІКА ДЛЯ РЕАЛЬНОЇ ТОРГІВЛІ (ВИМКНЕНО) ---
+        # try:
+        #     # Для реальної торгівлі розкоментуйте наступний рядок
+        #     # і переконайтеся, що ваші API ключі мають права на торгівлю.
+        #     # order = self.client.create_order(
+        #     #     symbol=symbol,
+        #     #     side=side,
+        #     #     type=Client.ORDER_TYPE_MARKET,
+        #     #     quantity=float(quantity)
+        #     # )
+        #     # logging.info(f"РЕАЛЬНИЙ ОРДЕР ВІДПРАВЛЕНО: {order}")
+        #     # return order
+        # except BinanceAPIException as e:
+        #     logging.error(f"Помилка створення реального ордера: {e}")
+        #     raise
+        # ----------------------------------------------------
+        
+        return None # Повертаємо None, якщо dry_run=False і реальна логіка закоментована

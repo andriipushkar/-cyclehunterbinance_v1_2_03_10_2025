@@ -43,6 +43,11 @@ def save_to_json(data, filename="output.json"):
         data: Дані для збереження.
         filename (str, optional): Назва файлу. За замовчуванням "output.json".
     """
+    # Переконуємося, що директорія для файлу існує
+    directory = os.path.dirname(filename)
+    if directory:
+        os.makedirs(directory, exist_ok=True)
+    
     local_tz = tz.tzlocal()
     now_utc = datetime.now(timezone.utc)
     now_local = now_utc.astimezone(local_tz)

@@ -24,8 +24,9 @@ logging.basicConfig(level=logging.DEBUG)
 class ProfitMonitor:
     """Клас для розрахунку та логування арбітражних можливостей."""
 
-    def __init__(self):
+    def __init__(self, profitable_cycles_queue=None):
         """Ініціалізує монітор прибутковості."""
+        self.profitable_cycles_queue = profitable_cycles_queue
         self.latest_prices = {}  # Словник для зберігання останніх цін (ask/bid)
         self.pair_to_cycles = {}  # Відображення торгової пари на цикли, в які вона входить
         self.latest_profits_by_cycle = {}  # Словник для зберігання останньої розрахованої прибутковості для кожного циклу
@@ -137,8 +138,8 @@ class ProfitMonitor:
             await self._write_profits_to_json(sorted_cycles, timestamp)
             await self._save_latest_prices() # Зберігаємо останні ціни
 
-    def _log_profitable_opportunity(self, cycle, profit_pct, prices):
-        """Логує вигідну можливість у консоль та у файли."""
+    async def _log_profitable_opportunity(self, cycle, profit_pct, prices):
+        """Логує вигідну можливість і додає її в чергу для бота."""
         now = datetime.now()
         timestamp = now.strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]
         
@@ -156,6 +157,10 @@ class ProfitMonitor:
         logging.info(txt_log_message)
         with open(hour_file_path_txt, 'a') as f:
             f.write(txt_log_message)
+        
+        if self.profitable_cycles_queue:
+            await self.profitable_cycles_queue.put({"cycle": cycle, "profit_pct": profit_pct, "prices": prices})
+
 
     async def calculate_and_log_profit(self, cycle, symbols_info, trade_fees, min_profit_threshold):
         """Розраховує прибуток для циклу та оновлює глобальний словник прибутків."""
@@ -173,7 +178,7 @@ class ProfitMonitor:
 
             if profit_pct > min_profit_threshold:
                 prices = {s['pair']: self.latest_prices[s['pair']] for s in steps}
-                self._log_profitable_opportunity(cycle, profit_pct, prices)
+                await self._log_profitable_opportunity(cycle, profit_pct, prices)
 
         except (KeyError, ValueError) as e:
             logging.debug(f"Помилка розрахунку для циклу {cycle}: {type(e).__name__} - {e}")

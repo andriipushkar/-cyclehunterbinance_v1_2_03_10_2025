@@ -33,6 +33,7 @@ class Config:
 
         # Ініціалізація значень за замовчуванням
         self.base_currency = 'USDT'
+        self.initial_investment_usd = Decimal('15.0')
         self.trading_fee = Decimal('0.001')
         self.min_profit_threshold = Decimal('0.0')
         self.max_cycle_length = 3
@@ -62,6 +63,7 @@ class Config:
 
         # Оновлюємо атрибути класу значеннями з файлу, якщо вони там є
         self.base_currency = config_data.get('base_currency', self.base_currency)
+        self.initial_investment_usd = Decimal(config_data.get('initial_investment_usd', self.initial_investment_usd))
         self.trading_fee = Decimal(config_data.get('trading_fee', self.trading_fee))
         self.min_profit_threshold = Decimal(config_data.get('min_profit_threshold', self.min_profit_threshold))
         self.max_cycle_length = config_data.get('max_cycle_length', self.max_cycle_length)

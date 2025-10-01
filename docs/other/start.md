@@ -1,7 +1,3 @@
-export GOOGLE_CLOUD_PROJECT=techanal 
+export GOOGLE_CLOUD_PROJECT=cyclehunterbinance
 gemini
 
-
-
-export GOOGLE_CLOUD_PROJECT=cyclehunter
-gemini
