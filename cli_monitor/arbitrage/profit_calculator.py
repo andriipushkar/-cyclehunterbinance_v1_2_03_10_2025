@@ -14,7 +14,7 @@ from datetime import datetime
 from decimal import Decimal, getcontext
 from cli_monitor.common.binance_client import BinanceClient
 from cli_monitor.common.config import config
-from cli_monitor.common.utils import structure_cycles_and_get_pairs, setup_logging
+from cli_monitor.common.utils import structure_cycles_and_get_pairs
 
 from . import constants
 from .cycle import Cycle
@@ -171,6 +171,7 @@ class ProfitMonitor:
 
         try:
             profit_pct = cycle.calculate_profit(self.latest_prices, symbols_info, trade_fees)
+            logging.debug(f"Calculated profit for {cycle}: {profit_pct:.4f}%")
             
             cycle_str = str(cycle)
             async with self.profits_lock:
@@ -215,7 +216,6 @@ class ProfitMonitor:
 
     def _setup(self):
         """Виконує початкове налаштування монітора."""
-        setup_logging()
         logging.info("Запуск Монітора Прибутковості...")
         os.makedirs(constants.LOG_DIR, exist_ok=True)
         os.makedirs(constants.OUTPUT_DIR, exist_ok=True)

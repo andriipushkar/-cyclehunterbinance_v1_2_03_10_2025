@@ -61,7 +61,11 @@ BINANCE_API_SECRET=your_api_secret_here
 
 - **Запустити пошук арбітражних циклів:**
   ```bash
+  # За замовчуванням використовує стратегію ліквідності (з whitelist.json)
   python3 -m cli_monitor arbitrage find-cycles
+
+  # Можна також вказати стратегію на основі волатильності
+  python3 -m cli_monitor arbitrage find-cycles --strategy volatility
   ```
 - **Запустити моніторинг прибутковості:**
   ```bash

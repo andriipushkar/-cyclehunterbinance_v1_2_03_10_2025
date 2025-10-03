@@ -16,8 +16,8 @@ class CycleFinder:
     """
     Клас для пошуку потенційних арбітражних циклів на біржі.
 
-    Аналізує доступні торгові пари та знаходить замкнені ланцюжки
-    (цикли) обміну, які можуть бути використані для арбітражу.
+    Аналізує доступні торгові пари, будує з них граф та знаходить замкнені 
+    ланцюжки обміну (цикли), які можуть бути використані для арбітражу.
     """
 
     def __init__(self):
@@ -49,12 +49,12 @@ class CycleFinder:
         """
         pairs = {}
         for s in self.exchange_info['symbols']:
-            # Перевіряємо, чи пара активна для торгівлі
+            # Враховуємо тільки активні торгові пари
             if s['status'] == 'TRADING':
                 base = s['baseAsset']
                 quote = s['quoteAsset']
 
-                # Додаємо вершини та ребра в граф
+                # Додаємо вершини (монети) та ребра (можливість обміну) в граф
                 if base not in pairs:
                     pairs[base] = []
                 if quote not in pairs:
@@ -72,8 +72,8 @@ class CycleFinder:
 
         Args:
             graph (dict): Граф торгових пар (список суміжності).
-            start_node (str): Вершина, з якої починається пошук циклів.
-            max_length (int): Максимальна довжина циклу.
+            start_node (str): Вершина (монета), з якої починається пошук циклів.
+            max_length (int): Максимальна довжина циклу (кількість монет).
 
         Returns:
             list: Список знайдених циклів. Кожен цикл - це список монет.
@@ -86,16 +86,16 @@ class CycleFinder:
         while stack:
             (vertex, path) = stack.pop()
 
-            # Обмеження глибини пошуку для уникнення занадто довгих циклів
+            # Обмеження глибини пошуку для уникнення занадто довгих і складних циклів
             if len(path) > max_length:
                 continue
 
-            # Перебираємо сусідні вершини
+            # Перебираємо сусідні вершини (монети, з якими можна торгувати)
             for neighbor in graph.get(vertex, []):
-                # Якщо сусід - це початкова вершина, і цикл має довжину >= 2, ми знайшли цикл
-                if neighbor == start_node and len(path) >= 2:
+                # Якщо сусід - це початкова вершина, і цикл має довжину >= 3, ми знайшли цикл
+                if neighbor == start_node and len(path) >= 3:
                     cycles.append(path + [neighbor])
-                # Якщо сусіда ще немає в поточному шляху, продовжуємо пошук
+                # Якщо сусіда ще немає в поточному шляху, продовжуємо пошук вглиб
                 elif neighbor not in path:
                     stack.append((neighbor, path + [neighbor]))
         return cycles
@@ -109,62 +109,116 @@ class CycleFinder:
         """
         logging.info(f"Знайдено {len(cycles)} потенційних арбітражних циклів.")
 
-        # Збереження в JSON
+        # Збереження в JSON для подальшої машинної обробки
         with open(constants.POSSIBLE_CYCLES_FILE, 'w') as f:
             json.dump(cycles, f, indent=2)
         logging.info(f"Цикли збережено у {constants.POSSIBLE_CYCLES_FILE}")
 
-        # Збереження в TXT для зручного перегляду
+        # Збереження в TXT для зручного ручного перегляду
         txt_path = constants.POSSIBLE_CYCLES_FILE.replace('.json', '.txt')
         with open(txt_path, 'w') as f:
             for cycle in cycles:
                 f.write(f"{ ' -> '.join(cycle)}\n")
         logging.info(f"Цикли збережено у {txt_path}")
 
-    def run(self, use_whitelist=False):
+    def _get_coins_by_volatility(self):
         """
-        Основний метод для запуску процесу пошуку циклів.
-
-        Виконує повний цикл роботи: завантажує інформацію з біржі,
-        фільтрує монети, будує граф, знаходить цикли та зберігає їх.
-
-        Args:
-            use_whitelist (bool): Якщо True, для пошуку будуть використовуватися
-                                  тільки монети з "білого списку" (whitelist.json).
-                                  Інакше - монети з конфігураційного файлу.
+        Відбирає монети на основі їхньої 24-годинної волатильності.
+        Стратегія полягає в тому, щоб зосередитись на монетах, ціна яких сильно коливається,
+        оскільки це може створювати більше арбітражних можливостей.
         """
-        logging.info("-- Запуск Пошуку Циклів --")
-        try:
-            self.exchange_info = self.client.get_exchange_info()
-        except Exception as e:
-            logging.error(f"Помилка отримання інформації з біржі Binance: {e}")
-            return
+        logging.info("Відбір монет за стратегією волатильності...")
+        tickers = self.client.get_24h_ticker()
+        if not tickers:
+            logging.error("Не вдалося отримати дані тікерів для розрахунку волатильності.")
+            return set()
 
-        all_trading_pairs = self._get_trading_pairs()
+        # Розраховуємо абсолютну волатильність для кожної пари
+        for ticker in tickers:
+            try:
+                price_change_percent = float(ticker.get('priceChangePercent', 0))
+                ticker['volatility'] = abs(price_change_percent)
+            except (ValueError, TypeError):
+                ticker['volatility'] = 0
 
-        # Визначаємо список дозволених монет для пошуку
+        # Сортуємо пари за спаданням волатильності
+        sorted_tickers = sorted(tickers, key=lambda t: t['volatility'], reverse=True)
+        
+        # Вибираємо топ-N найбільш волатильних пар згідно конфігурації
+        top_n_pairs = config.whitelist_top_n_pairs
+        top_volatile_pairs = sorted_tickers[:top_n_pairs]
+
+        # Збираємо унікальні монети з цих пар, додаючи базову валюту
+        allowed_coins = set([self.base_currency])
+        for ticker in top_volatile_pairs:
+            # Знаходимо інформацію про пару, щоб отримати базовий та котирувальний активи
+            symbol_info = next((s for s in self.exchange_info['symbols'] if s['symbol'] == ticker['symbol']), None)
+            if symbol_info:
+                allowed_coins.add(symbol_info['baseAsset'])
+                allowed_coins.add(symbol_info['quoteAsset'])
+        
+        logging.info(f"Відібрано {len(allowed_coins)} монет на основі волатильності.")
+        return allowed_coins
+
+    def get_allowed_coins(self, strategy='liquidity'):
+        """
+        Повертає набір дозволених монет на основі обраної стратегії.
+        Це ключовий метод для фільтрації, що визначає, які монети братимуть участь у пошуку циклів.
+        """
+        # Кешування інформації про біржу, щоб не робити зайвих запитів
+        if not self.exchange_info:
+            try:
+                self.exchange_info = self.client.get_exchange_info()
+            except Exception as e:
+                logging.error(f"Помилка отримання інформації з біржі Binance: {e}")
+                return set()
+
         allowed_coins = set()
-        if use_whitelist:
+        if strategy == 'liquidity':
+            # Стратегія за замовчуванням: використовуємо монети з попередньо згенерованого білого списку
             logging.info("Використання 'білого списку' для фільтрації монет.")
             try:
                 with open(constants.WHITELIST_FILE, 'r') as f:
                     whitelist_data = json.load(f)
                 allowed_coins = set(whitelist_data.get('whitelist_assets', []))
             except FileNotFoundError:
-                logging.error(f"Файл 'білого списку' {constants.WHITELIST_FILE} не знайдено.")
-                return
+                logging.warning(f"Файл 'білого списку' {constants.WHITELIST_FILE} не знайдено. Спробуйте згенерувати його спочатку.")
+                # Фоллбек: використовуємо базові монети з конфігурації
+                allowed_coins = set(config.whitelist_base_coins + [self.base_currency])
             except json.JSONDecodeError:
                 logging.error(f"Помилка декодування JSON з {constants.WHITELIST_FILE}.")
-                return
+                return set()
+        elif strategy == 'volatility':
+            # Стратегія волатильності: вибираємо найактивніші монети
+            allowed_coins = self._get_coins_by_volatility()
         else:
+            # Фоллбек: використовуємо список монет, жорстко заданий у конфігурації
             logging.info("Використання 'monitored_coins' з конфігурації для фільтрації.")
             allowed_coins = set(self.monitored_coins + [self.base_currency])
+        
+        return allowed_coins
+
+    def run(self, strategy='liquidity'):
+        """
+        Основний метод для запуску процесу пошуку циклів.
+        Оркеструє весь процес: від вибору монет до збереження результатів.
+
+        Args:
+            strategy (str): Стратегія відбору монет ('liquidity' або 'volatility').
+        """
+        logging.info(f"-- Запуск Пошуку Циклів (Стратегія: {strategy}) --")
+        
+        # 1. Отримуємо набір монет для аналізу згідно з обраною стратегією
+        allowed_coins = self.get_allowed_coins(strategy)
 
         if not allowed_coins:
             logging.error("Список дозволених монет порожній. Пошук неможливий.")
             return
 
-        # Фільтруємо граф, залишаючи тільки дозволені монети
+        # 2. Будуємо повний граф всіх торгових пар на біржі
+        all_trading_pairs = self._get_trading_pairs()
+
+        # 3. Фільтруємо граф, залишаючи тільки ребра між дозволеними монетами
         self.trading_pairs = {}
         for coin, neighbors in all_trading_pairs.items():
             if coin in allowed_coins:
@@ -172,9 +226,10 @@ class CycleFinder:
                 if filtered_neighbors:
                     self.trading_pairs[coin] = filtered_neighbors
 
-        # Запускаємо пошук циклів
+        # 4. Запускаємо пошук циклів на відфільтрованому графі
         found_cycles = self._find_cycles_dfs(self.trading_pairs, self.base_currency, self.max_cycle_length)
 
+        # 5. Зберігаємо знайдені цикли у файли
         self._save_cycles(found_cycles)
         logging.info("-- Пошук Циклів Завершено --")
 
@@ -182,7 +237,7 @@ class CycleFinder:
 if __name__ == '__main__':
     """
     Точка входу для запуску скрипта як самостійної програми.
-    Дозволяє запустити пошук циклів напряму.
+    Дозволяє запустити пошук циклів напряму, минаючи головний CLI-парсер.
     """
     finder = CycleFinder()
     finder.run()

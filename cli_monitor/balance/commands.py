@@ -7,7 +7,7 @@ import logging
 import time
 from datetime import datetime
 from cli_monitor.common.binance_client import BinanceClient
-from cli_monitor.common.utils import save_to_json, format_balances, setup_logging
+from cli_monitor.common.utils import save_to_json, format_balances
 from cli_monitor.common.exceptions import SymbolPriceError
 
 class BalanceMonitor:
@@ -126,7 +126,6 @@ class BalanceMonitor:
         
         Виводить результат у консоль та зберігає у файли `*.json` та `*.txt`.
         """
-        setup_logging()
         logging.info("Отримання балансів...")
         try:
             balances = self._get_and_save_balances()
@@ -144,7 +143,6 @@ class BalanceMonitor:
         
         Оновлює дані кожну хвилину до зупинки користувачем (Ctrl+C).
         """
-        setup_logging()
         logging.info("Запуск режиму моніторингу. Натисніть Ctrl+C для зупинки.")
         while True:
             try:

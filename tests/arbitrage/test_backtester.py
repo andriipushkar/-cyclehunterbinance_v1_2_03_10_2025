@@ -90,6 +90,6 @@ class TestBacktester:
         handle = mock_file()
         written_content = "".join(c[0][0] for c in handle.write.call_args_list)
 
-        assert "SUCCESS!" in written_content
-        assert "Cycle: USDT -> BTC -> ETH -> USDT" in written_content
-        assert "PROFIT:" in written_content
+        assert "УСПІХ!" in written_content
+        assert "Цикл: USDT -> BTC -> ETH -> USDT" in written_content
+        assert "ПРИБУТОК:" in written_content

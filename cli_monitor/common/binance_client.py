@@ -238,6 +238,22 @@ class BinanceClient:
 
         return self._trade_fees.get(symbol)
 
+    def get_order_book(self, symbol):
+        """
+        Отримує стакан ордерів (order book) для вказаної пари.
+
+        Args:
+            symbol (str): Символ торгової пари (наприклад, "BTCUSDT").
+
+        Returns:
+            dict: Словник, що містить списки 'bids' (ордери на купівлю) та 'asks' (ордери на продаж).
+        """
+        try:
+            return self.client.get_order_book(symbol=symbol)
+        except (BinanceAPIException, BinanceRequestException) as e:
+            logging.error(f"Помилка отримання стакану ордерів для {symbol}: {e}")
+            return None
+
     def create_market_order(self, symbol, side, quantity, dry_run=True):
         """
         Створює ринковий ордер (Market Order).

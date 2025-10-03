@@ -26,6 +26,7 @@ def add_arguments(parser):
 
     # Команда для пошуку циклів
     find_cycles_parser = subparsers.add_parser("find-cycles", help="Знайти трикутні арбітражні цикли.")
+    find_cycles_parser.add_argument('--strategy', type=str, default='liquidity', choices=['liquidity', 'volatility'], help="Стратегія відбору пар для пошуку циклів.")
     
     # Команда для запуску моніторингу прибутковості
     run_monitor_parser = subparsers.add_parser("run-monitor", help="Запустити монітор розрахунку прибутку.")
@@ -39,7 +40,7 @@ def add_arguments(parser):
     whitelist_parser = subparsers.add_parser("generate-whitelist", help="Згенерувати білий список монет.")
     blacklist_parser = subparsers.add_parser("generate-blacklist", help="Згенерувати чорний список монет.")
     
-    # Команда для запуску повноцінного бота
+    # Команда для запуску повноцінн
     start_bot_parser = subparsers.add_parser("start-bot", help="Запустити довготривалого арбітражного бота.")
 
 def run(args):
@@ -51,7 +52,7 @@ def run(args):
     """
     if args.arbitrage_command == "find-cycles":
         finder = CycleFinder()
-        finder.run()
+        finder.run(strategy=args.strategy)
     elif args.arbitrage_command == "run-monitor":
         asyncio.run(profit_calculator_main())
     elif args.arbitrage_command == "backtest":

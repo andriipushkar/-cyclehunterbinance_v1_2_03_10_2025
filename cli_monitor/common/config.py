@@ -38,11 +38,13 @@ class Config:
         self.min_profit_threshold = Decimal('0.0')
         self.min_trade_volume_usd = 100000
         self.max_cycle_length = 3
+        self.log_level = 'INFO'
         self.monitored_coins = []
         self.whitelist_base_coins = []
         self.whitelist_min_volume_usd = 100000
         self.whitelist_top_n_pairs = 100
         self.blacklist_bottom_n_pairs = 100
+        self.max_slippage_pct = Decimal('0.1')
 
     def load_config(self):
         """
@@ -69,11 +71,13 @@ class Config:
         self.min_profit_threshold = Decimal(config_data.get('min_profit_threshold', self.min_profit_threshold))
         self.min_trade_volume_usd = config_data.get('min_trade_volume_usd', self.min_trade_volume_usd)
         self.max_cycle_length = config_data.get('max_cycle_length', self.max_cycle_length)
+        self.log_level = config_data.get('log_level', self.log_level)
         self.monitored_coins = config_data.get('monitored_coins', self.monitored_coins)
         self.whitelist_base_coins = config_data.get('whitelist_base_coins', self.whitelist_base_coins)
         self.whitelist_min_volume_usd = config_data.get('whitelist_min_volume_usd', self.whitelist_min_volume_usd)
         self.whitelist_top_n_pairs = config_data.get('whitelist_top_n_pairs', self.whitelist_top_n_pairs)
         self.blacklist_bottom_n_pairs = config_data.get('blacklist_bottom_n_pairs', self.blacklist_bottom_n_pairs)
+        self.max_slippage_pct = Decimal(config_data.get('max_slippage_pct', self.max_slippage_pct))
 
 # Створюємо єдиний екземпляр класу Config, який буде імпортуватися в інші модулі.
 # Це реалізує патерн Singleton, забезпечуючи, що всі частини програми

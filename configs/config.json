@@ -2,14 +2,15 @@
   "base_currency": "USDT",
   "initial_investment_usd": 15,
   "trading_fee": "0.001",
-  "min_profit_threshold": "0.50",
+  "min_profit_threshold": "0.80",
   "min_trade_volume_usd": 100000,
   "max_cycle_length": 4,
   "monitored_coins": [
     "BTC", "ETH", "USDT", "XRP", "BNB", "SOL", "USDC", "DOGE", "STETH", "TRX"
   ],
-  "whitelist_base_coins": ["BTC", "ETH", "USDT", "BNB", "ADA", "SOL", "DOGE", "LTC", "XRP", "DOT"],
+  "whitelist_base_coins": ["BTC", "ETH", "USDT", "BNB"],
   "whitelist_min_volume_usd": 100000,
-  "whitelist_top_n_pairs": 50,
-  "blacklist_bottom_n_pairs": 50
+  "whitelist_top_n_pairs": 100,
+  "blacklist_bottom_n_pairs": 100,
+  "max_slippage_pct": 0.1
 }

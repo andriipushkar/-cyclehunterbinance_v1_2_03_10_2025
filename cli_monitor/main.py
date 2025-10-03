@@ -13,6 +13,7 @@ import sys
 from .balance import main as balance_main
 from .arbitrage import main as arbitrage_main
 from .common.config import config
+from .common.utils import setup_logging
 
 def main():
     """
@@ -20,6 +21,9 @@ def main():
     """
     # Завантажуємо конфігурацію з файлів .env та config.json
     config.load_config()
+    
+    # Налаштовуємо логування
+    setup_logging()
     
     # Створюємо головний парсер
     parser = argparse.ArgumentParser(description="CLI-інструмент для моніторингу та арбітражу на Binance")

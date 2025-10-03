@@ -8,32 +8,44 @@ import logging
 import os
 from datetime import datetime, timezone
 from dateutil import tz
+from logging.handlers import RotatingFileHandler
+from .config import config
 
 def setup_logging():
     """
-    Налаштовує систему логування.
+    Налаштовує систему логування з ротацією файлів.
 
     Створює щоденну папку для логів та налаштовує запис логів у файл та
-    у консоль. Перед налаштуванням видаляє попередні обробники, щоб уникнути
-    дублювання записів при повторних викликах.
+    у консоль. Використовує RotatingFileHandler для обмеження розміру лог-файлів.
+    Рівень логування береться з конфігурації.
     """
     log_dir = os.path.join(os.path.dirname(__file__), '..', '..', 'logs', datetime.now().strftime('%Y-%m-%d'))
     os.makedirs(log_dir, exist_ok=True)
     log_file = os.path.join(log_dir, 'bot.log')
 
-    # Видаляємо всі попередні обробники з кореневого логера
-    for handler in logging.root.handlers[:]:
-        logging.root.removeHandler(handler)
+    # Визначаємо рівень логування з конфігурації, за замовчуванням DEBUG
+    log_level = getattr(logging, config.log_level.upper(), logging.DEBUG)
 
-    # Налаштовуємо логування
-    logging.basicConfig(
-        level=logging.DEBUG,
-        format='%(asctime)s - %(levelname)s - %(message)s',
-        handlers=[
-            logging.FileHandler(log_file), # Запис у файл
-            logging.StreamHandler()      # Вивід у консоль
-        ]
-    )
+    # Створюємо обробник, що ротує файли
+    # 10 MB на файл, зберігаємо 5 останніх файлів
+    file_handler = RotatingFileHandler(log_file, maxBytes=10*1024*1024, backupCount=5)
+    file_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+
+    # Створюємо обробник для виводу в консоль
+    stream_handler = logging.StreamHandler()
+    stream_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+
+    # Отримуємо кореневий логер і налаштовуємо його
+    root_logger = logging.getLogger()
+    root_logger.setLevel(log_level)
+
+    # Видаляємо всі попередні обробники, щоб уникнути дублювання
+    if root_logger.hasHandlers():
+        root_logger.handlers.clear()
+
+    # Додаємо нові обробники
+    root_logger.addHandler(file_handler)
+    root_logger.addHandler(stream_handler)
 
 def save_to_json(data, filename="output.json"):
     """

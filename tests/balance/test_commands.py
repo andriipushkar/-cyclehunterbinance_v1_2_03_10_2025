@@ -83,7 +83,7 @@ def test_format_balances():
     
     # Assert
     # Перевіряємо, що ключові дані присутні у відформатованому рядку
-    assert "Total Balance: $5550000.00" in formatted_string
+    assert "Загальний баланс: $5550000.00" in formatted_string
     assert "BTC: 1.0" in formatted_string
     assert "ETH: 10.0" in formatted_string
     assert "BNB: 100.0" in formatted_string
