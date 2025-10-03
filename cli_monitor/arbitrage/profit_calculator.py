@@ -9,7 +9,7 @@ import asyncio
 import json
 import os
 import websockets
-import logging
+from loguru import logger
 from datetime import datetime
 from decimal import Decimal, getcontext
 from cli_monitor.common.binance_client import BinanceClient
@@ -19,7 +19,7 @@ from cli_monitor.common.utils import structure_cycles_and_get_pairs
 from . import constants
 from .cycle import Cycle
 
-logging.basicConfig(level=logging.DEBUG)
+
 
 class ProfitMonitor:
     """Клас для розрахунку та логування арбітражних можливостей."""

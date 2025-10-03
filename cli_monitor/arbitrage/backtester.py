@@ -8,7 +8,7 @@
 import asyncio
 import json
 import os
-import logging
+from loguru import logger
 import argparse
 import sys
 from datetime import datetime
@@ -22,7 +22,7 @@ from cli_monitor.common.utils import structure_cycles_and_get_pairs
 from .cycle import Cycle
 from . import constants
 
-logging.basicConfig(level=logging.INFO)
+
 # Встановлюємо точність для розрахунків з Decimal
 getcontext().prec = 15
 

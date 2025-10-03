@@ -13,7 +13,7 @@ import sys
 from .balance import main as balance_main
 from .arbitrage import main as arbitrage_main
 from .common.config import config
-from .common.utils import setup_logging
+from .common.logging_setup import setup_logging
 
 def main():
     """

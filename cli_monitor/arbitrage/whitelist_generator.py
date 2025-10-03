@@ -6,7 +6,7 @@ Whitelist - це список активів, які вважаються дос
 мінімальний обсяг торгів) задаються в конфігураційному файлі.
 """
 
-import logging
+from loguru import logger
 import json
 from decimal import Decimal
 from cli_monitor.common.binance_client import BinanceClient
@@ -23,7 +23,7 @@ def generate_whitelist():
     4. Сортує відфільтровані пари за обсягом і вибирає топ-N.
     5. Зберігає активи та пари з топ-N у файл `configs/whitelist.json`.
     """
-    logging.info("Початок генерації білого списку...")
+    logger.info("Початок генерації білого списку...")
     
     client = BinanceClient()
     
@@ -33,7 +33,7 @@ def generate_whitelist():
     top_n_pairs = config.whitelist_top_n_pairs
 
     if not base_coins:
-        logging.error("Базові монети для білого списку не налаштовані. Скасування.")
+        logger.error("Базові монети для білого списку не налаштовані. Скасування.")
         return
 
     # Отримання даних з біржі
@@ -41,10 +41,10 @@ def generate_whitelist():
     tickers = client.get_24h_ticker()
 
     if not exchange_info or not tickers:
-        logging.error("Не вдалося отримати інформацію про біржу або тікери. Скасування.")
+        logger.error("Не вдалося отримати інформацію про біржу або тікери. Скасування.")
         return
 
-    logging.info(f"Отримано {len(exchange_info.get('symbols', []))} символів та {len(tickers)} тікерів.")
+    logger.info(f"Отримано {len(exchange_info.get('symbols', []))} символів та {len(tickers)} тікерів.")
 
     # Створюємо словник для швидкого доступу до даних тікера за назвою пари
     ticker_map = {ticker['symbol']: ticker for ticker in tickers}
@@ -104,7 +104,7 @@ def generate_whitelist():
         whitelist_assets.add(pair_data['baseAsset'])
         whitelist_assets.add(pair_data['quoteAsset'])
 
-    logging.info(f"Білий список згенеровано: {len(whitelist_assets)} активів та {len(whitelist_pairs)} пар.")
+    logger.info(f"Білий список згенеровано: {len(whitelist_assets)} активів та {len(whitelist_pairs)} пар.")
 
     # Зберігаємо результат у файл
     output_path = "configs/whitelist.json"
@@ -114,9 +114,9 @@ def generate_whitelist():
                 "whitelist_assets": sorted(list(whitelist_assets)),
                 "whitelist_pairs": sorted(list(whitelist_pairs))
             }, f, indent=2)
-        logging.info(f"Білий список збережено у {output_path}")
+        logger.info(f"Білий список збережено у {output_path}")
     except IOError as e:
-        logging.error(f"Помилка збереження білого списку у {output_path}: {e}")
+        logger.error(f"Помилка збереження білого списку у {output_path}: {e}")
 
 if __name__ == '__main__':
     # Цей блок виконується, якщо скрипт запускається напряму

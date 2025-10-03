@@ -4,7 +4,7 @@
 """
 
 import asyncio
-import logging
+from loguru import logger
 import csv
 import os
 from datetime import datetime

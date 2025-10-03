@@ -7,7 +7,7 @@
 
 import argparse
 import asyncio
-import logging
+from loguru import logger
 from .cycle_finder import CycleFinder
 from .profit_calculator import main as profit_calculator_main
 from .backtester import Backtester

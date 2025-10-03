@@ -6,7 +6,7 @@ Blacklist - це список найменш ліквідних активів. 
 помилкових розрахунків, пов'язаних з низьколіквідними парами.
 """
 
-import logging
+from loguru import logger
 import json
 from decimal import Decimal
 from cli_monitor.common.binance_client import BinanceClient
@@ -23,7 +23,7 @@ def generate_blacklist():
     4. Сортує кандидатів за зростанням обсягу торгів і вибирає топ-N найгірших.
     5. Зберігає активи та пари з цього списку у файл `configs/blacklist.json`.
     """
-    logging.info("Початок генерації чорного списку...")
+    logger.info("Початок генерації чорного списку...")
 
     client = BinanceClient()
 
@@ -36,12 +36,12 @@ def generate_blacklist():
         with open(whitelist_path, 'r') as f:
             whitelist_data = json.load(f)
         whitelist_pairs_set = set(whitelist_data.get('whitelist_pairs', []))
-        logging.info(f"Завантажено {len(whitelist_pairs_set)} пар з білого списку.")
+        logger.info(f"Завантажено {len(whitelist_pairs_set)} пар з білого списку.")
     except FileNotFoundError:
-        logging.warning(f"Файл білого списку не знайдено: {whitelist_path}. Чорний список може містити ліквідні пари.")
+        logger.warning(f"Файл білого списку не знайдено: {whitelist_path}. Чорний список може містити ліквідні пари.")
         whitelist_pairs_set = set()
     except json.JSONDecodeError:
-        logging.error(f"Помилка декодування JSON з білого списку: {whitelist_path}. Скасування.")
+        logger.error(f"Помилка декодування JSON з білого списку: {whitelist_path}. Скасування.")
         return
 
     # Отримуємо дані з біржі
@@ -49,10 +49,10 @@ def generate_blacklist():
     tickers = client.get_24h_ticker()
 
     if not exchange_info or not tickers:
-        logging.error("Не вдалося отримати інформацію про біржу або тікери. Скасування.")
+        logger.error("Не вдалося отримати інформацію про біржу або тікери. Скасування.")
         return
 
-    logging.info(f"Отримано {len(exchange_info.get('symbols', []))} символів та {len(tickers)} тікерів.")
+    logger.info(f"Отримано {len(exchange_info.get('symbols', []))} символів та {len(tickers)} тікерів.")
 
     ticker_map = {ticker['symbol']: ticker for ticker in tickers}
     
@@ -97,7 +97,7 @@ def generate_blacklist():
         blacklist_assets.add(pair_data['baseAsset'])
         blacklist_assets.add(pair_data['quoteAsset'])
 
-    logging.info(f"Чорний список згенеровано: {len(blacklist_assets)} активів та {len(blacklist_pairs)} пар.")
+    logger.info(f"Чорний список згенеровано: {len(blacklist_assets)} активів та {len(blacklist_pairs)} пар.")
 
     # Зберігаємо результат у файл
     output_path = "configs/blacklist.json"
@@ -107,9 +107,9 @@ def generate_blacklist():
                 "blacklist_assets": sorted(list(blacklist_assets)),
                 "blacklist_pairs": sorted(list(blacklist_pairs))
             }, f, indent=2)
-        logging.info(f"Чорний список збережено у {output_path}")
+        logger.info(f"Чорний список збережено у {output_path}")
     except IOError as e:
-        logging.error(f"Помилка збереження чорного списку у {output_path}: {e}")
+        logger.error(f"Помилка збереження чорного списку у {output_path}: {e}")
 
 if __name__ == '__main__':
     # Для тестування та ручної генерації

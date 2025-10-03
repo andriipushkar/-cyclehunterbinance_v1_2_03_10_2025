@@ -3,7 +3,7 @@
 отримання та моніторингу балансів користувача на біржі Binance.
 """
 
-import logging
+from loguru import logger
 import time
 from datetime import datetime
 from cli_monitor.common.binance_client import BinanceClient
@@ -52,7 +52,7 @@ class BalanceMonitor:
                 if value >= min_value:
                     filtered_balances.append(balance)
             except SymbolPriceError as e:
-                logging.warning(e)
+                logger.warning(e)
                 continue
         return filtered_balances, total_balance_usd
 
@@ -81,7 +81,7 @@ class BalanceMonitor:
                 value = total * price
                 total_balance_usd += value
             except SymbolPriceError as e:
-                logging.warning(e)
+                logger.warning(e)
                 continue
         return total_balance_usd
 
@@ -126,15 +126,15 @@ class BalanceMonitor:
         
         Виводить результат у консоль та зберігає у файли `*.json` та `*.txt`.
         """
-        logging.info("Отримання балансів...")
+        logger.info("Отримання балансів...")
         try:
             balances = self._get_and_save_balances()
             formatted_balances = format_balances(balances["balances"])
-            logging.info(f"Баланси успішно отримано.\n{formatted_balances}")
+            logger.info(f"Баланси успішно отримано.\n{formatted_balances}")
             with open("output/balance_output.txt", "w") as f:
                 f.write(formatted_balances)
         except Exception as e:
-            logging.error(f"Під час отримання балансів сталася помилка: {e}", exc_info=True)
+            logger.error(f"Під час отримання балансів сталася помилка: {e}", exc_info=True)
 
 
     def monitor_balances(self):
@@ -143,18 +143,18 @@ class BalanceMonitor:
         
         Оновлює дані кожну хвилину до зупинки користувачем (Ctrl+C).
         """
-        logging.info("Запуск режиму моніторингу. Натисніть Ctrl+C для зупинки.")
+        logger.info("Запуск режиму моніторингу. Натисніть Ctrl+C для зупинки.")
         while True:
             try:
                 balances = self._get_and_save_balances()
                 formatted_balances = format_balances(balances["balances"])
                 with open("output/balance_output.txt", "w") as f:
                     f.write(formatted_balances)
-                logging.info(f"Дані оновлено о {datetime.now().strftime('%H:%M:%S')}")
+                logger.info(f"Дані оновлено о {datetime.now().strftime('%H:%M:%S')}")
                 time.sleep(60) # Пауза на 60 секунд
             except KeyboardInterrupt:
-                logging.info("Моніторинг зупинено користувачем.")
+                logger.info("Моніторинг зупинено користувачем.")
                 break
             except Exception as e:
-                logging.error(f"Під час моніторингу сталася помилка: {e}", exc_info=True)
+                logger.error(f"Під час моніторингу сталася помилка: {e}", exc_info=True)
                 time.sleep(60)

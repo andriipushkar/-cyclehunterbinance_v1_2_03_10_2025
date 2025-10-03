@@ -5,12 +5,12 @@
 """
 
 import json
-import logging
+from loguru import logger
 from cli_monitor.common.binance_client import BinanceClient
 from cli_monitor.common.config import config
 from . import constants
 
-logging.basicConfig(level=logging.INFO)
+
 
 class CycleFinder:
     """
@@ -107,19 +107,19 @@ class CycleFinder:
         Args:
             cycles (list): Список знайдених циклів для збереження.
         """
-        logging.info(f"Знайдено {len(cycles)} потенційних арбітражних циклів.")
+        logger.info(f"Знайдено {len(cycles)} потенційних арбітражних циклів.")
 
         # Збереження в JSON для подальшої машинної обробки
         with open(constants.POSSIBLE_CYCLES_FILE, 'w') as f:
             json.dump(cycles, f, indent=2)
-        logging.info(f"Цикли збережено у {constants.POSSIBLE_CYCLES_FILE}")
+        logger.info(f"Цикли збережено у {constants.POSSIBLE_CYCLES_FILE}")
 
         # Збереження в TXT для зручного ручного перегляду
         txt_path = constants.POSSIBLE_CYCLES_FILE.replace('.json', '.txt')
         with open(txt_path, 'w') as f:
             for cycle in cycles:
                 f.write(f"{ ' -> '.join(cycle)}\n")
-        logging.info(f"Цикли збережено у {txt_path}")
+        logger.info(f"Цикли збережено у {txt_path}")
 
     def _get_coins_by_volatility(self):
         """
@@ -127,10 +127,10 @@ class CycleFinder:
         Стратегія полягає в тому, щоб зосередитись на монетах, ціна яких сильно коливається,
         оскільки це може створювати більше арбітражних можливостей.
         """
-        logging.info("Відбір монет за стратегією волатильності...")
+        logger.info("Відбір монет за стратегією волатильності...")
         tickers = self.client.get_24h_ticker()
         if not tickers:
-            logging.error("Не вдалося отримати дані тікерів для розрахунку волатильності.")
+            logger.error("Не вдалося отримати дані тікерів для розрахунку волатильності.")
             return set()
 
         # Розраховуємо абсолютну волатильність для кожної пари
@@ -157,7 +157,7 @@ class CycleFinder:
                 allowed_coins.add(symbol_info['baseAsset'])
                 allowed_coins.add(symbol_info['quoteAsset'])
         
-        logging.info(f"Відібрано {len(allowed_coins)} монет на основі волатильності.")
+        logger.info(f"Відібрано {len(allowed_coins)} монет на основі волатильності.")
         return allowed_coins
 
     def get_allowed_coins(self, strategy='liquidity'):
@@ -170,30 +170,30 @@ class CycleFinder:
             try:
                 self.exchange_info = self.client.get_exchange_info()
             except Exception as e:
-                logging.error(f"Помилка отримання інформації з біржі Binance: {e}")
+                logger.error(f"Помилка отримання інформації з біржі Binance: {e}")
                 return set()
 
         allowed_coins = set()
         if strategy == 'liquidity':
             # Стратегія за замовчуванням: використовуємо монети з попередньо згенерованого білого списку
-            logging.info("Використання 'білого списку' для фільтрації монет.")
+            logger.info("Використання 'білого списку' для фільтрації монет.")
             try:
                 with open(constants.WHITELIST_FILE, 'r') as f:
                     whitelist_data = json.load(f)
                 allowed_coins = set(whitelist_data.get('whitelist_assets', []))
             except FileNotFoundError:
-                logging.warning(f"Файл 'білого списку' {constants.WHITELIST_FILE} не знайдено. Спробуйте згенерувати його спочатку.")
+                logger.warning(f"Файл 'білого списку' {constants.WHITELIST_FILE} не знайдено. Спробуйте згенерувати його спочатку.")
                 # Фоллбек: використовуємо базові монети з конфігурації
                 allowed_coins = set(config.whitelist_base_coins + [self.base_currency])
             except json.JSONDecodeError:
-                logging.error(f"Помилка декодування JSON з {constants.WHITELIST_FILE}.")
+                logger.error(f"Помилка декодування JSON з {constants.WHITELIST_FILE}.")
                 return set()
         elif strategy == 'volatility':
             # Стратегія волатильності: вибираємо найактивніші монети
             allowed_coins = self._get_coins_by_volatility()
         else:
             # Фоллбек: використовуємо список монет, жорстко заданий у конфігурації
-            logging.info("Використання 'monitored_coins' з конфігурації для фільтрації.")
+            logger.info("Використання 'monitored_coins' з конфігурації для фільтрації.")
             allowed_coins = set(self.monitored_coins + [self.base_currency])
         
         return allowed_coins
@@ -206,13 +206,13 @@ class CycleFinder:
         Args:
             strategy (str): Стратегія відбору монет ('liquidity' або 'volatility').
         """
-        logging.info(f"-- Запуск Пошуку Циклів (Стратегія: {strategy}) --")
+        logger.info(f"-- Запуск Пошуку Циклів (Стратегія: {strategy}) --")
         
         # 1. Отримуємо набір монет для аналізу згідно з обраною стратегією
         allowed_coins = self.get_allowed_coins(strategy)
 
         if not allowed_coins:
-            logging.error("Список дозволених монет порожній. Пошук неможливий.")
+            logger.error("Список дозволених монет порожній. Пошук неможливий.")
             return
 
         # 2. Будуємо повний граф всіх торгових пар на біржі
@@ -231,7 +231,7 @@ class CycleFinder:
 
         # 5. Зберігаємо знайдені цикли у файли
         self._save_cycles(found_cycles)
-        logging.info("-- Пошук Циклів Завершено --")
+        logger.info("-- Пошук Циклів Завершено --")
 
 
 if __name__ == '__main__':
