@@ -1,0 +1,8 @@
+{
+  "ignored_assets": ["LDBNB", "LDDOGE", "ETHW", "HEMI"],
+  "min_value_to_display": 1,
+  "output_json_path": "output/balance_output.json",
+  "output_txt_path": "output/balance_output.txt",
+  "monitoring_interval_seconds": 60,
+  "log_level": "INFO"
+}

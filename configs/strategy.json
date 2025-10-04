@@ -12,12 +12,5 @@
   "whitelist_min_volume_usd": 100000,
   "whitelist_top_n_pairs": 100,
   "blacklist_bottom_n_pairs": 100,
-  "max_slippage_pct": 0.1,
-  "balance_monitor": {
-    "ignored_assets": ["LDBNB", "LDDOGE", "ETHW", "HEMI"],
-    "min_value_to_display": 1,
-    "output_json_path": "output/balance_output.json",
-    "output_txt_path": "output/balance_output.txt",
-    "monitoring_interval_seconds": 60
-  }
+  "max_slippage_pct": 0.1
 }

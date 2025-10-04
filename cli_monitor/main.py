@@ -20,7 +20,7 @@ def main():
     Головна функція, що виконується при запуску `python3 -m cli_monitor`.
     """
     # Завантажуємо конфігурацію з файлів .env та config.json
-    config.load_config()
+    config.load_configs()
     
     # Налаштовуємо логування
     setup_logging()

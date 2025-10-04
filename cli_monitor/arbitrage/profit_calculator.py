@@ -8,6 +8,7 @@
 import asyncio
 import json
 import os
+import logging
 import websockets
 from loguru import logger
 from datetime import datetime
