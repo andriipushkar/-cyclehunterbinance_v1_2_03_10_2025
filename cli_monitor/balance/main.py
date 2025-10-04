@@ -8,6 +8,39 @@
 import argparse
 from .commands import BalanceMonitor
 
+class BalanceApp:
+    """Клас, що інкапсулює логіку виконання команд для роботи з балансом."""
+
+    def __init__(self, args):
+        """
+        Ініціалізує додаток з аргументами командного рядка.
+
+        Args:
+            args: Аргументи, розпарсені з argparse.
+        """
+        self.args = args
+        self._command_map = {
+            "get": self._run_get,
+            "monitor": self._run_monitor,
+        }
+
+    def run(self):
+        """Запускає відповідний метод на основі команди."""
+        command_func = self._command_map.get(self.args.balance_command)
+        if command_func:
+            command_func()
+        else:
+            # Цей код не має виконуватись завдяки `required=True` в add_subparsers
+            print(f"Невідома команда балансу: {self.args.balance_command}")
+
+    def _run_get(self):
+        monitor = BalanceMonitor()
+        monitor.get_balances()
+
+    def _run_monitor(self):
+        monitor = BalanceMonitor()
+        monitor.monitor_balances()
+
 def add_arguments(parser):
     """
     Додає специфічні для балансу підкоманди до парсера аргументів.
@@ -25,13 +58,10 @@ def add_arguments(parser):
 
 def run(args):
     """
-    Виконує відповідну функцію на основі переданих аргументів.
+    Створює екземпляр BalanceApp та запускає його.
 
     Args:
         args: Аргументи, розпарсені з командного рядка.
     """
-    monitor = BalanceMonitor()
-    if args.balance_command == "get":
-        monitor.get_balances()
-    elif args.balance_command == "monitor":
-        monitor.monitor_balances()
+    app = BalanceApp(args)
+    app.run()

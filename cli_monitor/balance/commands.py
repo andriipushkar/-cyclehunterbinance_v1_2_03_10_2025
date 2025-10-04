@@ -6,6 +6,7 @@
 from loguru import logger
 import time
 from datetime import datetime
+from cli_monitor.common.config import config
 from cli_monitor.common.binance_client import BinanceClient
 from cli_monitor.common.utils import save_to_json, format_balances
 from cli_monitor.common.exceptions import SymbolPriceError
@@ -16,44 +17,60 @@ class BalanceMonitor:
     def __init__(self):
         """
         Ініціалізує монітор балансів.
-        Створює екземпляр клієнта Binance та визначає список ігнорованих активів.
+        Створює екземпляр клієнта Binance.
         """
         self.client = BinanceClient()
-        # Активи, які слід ігнорувати при розрахунку загальної вартості
-        self.ignored_assets = ['LDBNB', 'LDDOGE', 'ETHW', 'HEMI']
 
-    def _process_balances(self, balances, balance_key='total', min_value=1):
+    def _calculate_balances_usd(self, balances, balance_key):
         """
-        Обробляє список балансів: фільтрує, конвертує в USD та підсумовує.
+        Розраховує вартість кожного балансу в USD та загальну вартість.
 
         Args:
             balances (list): Список словників з балансами.
             balance_key (str): Ключ у словнику, де зберігається сума активу.
-            min_value (int): Мінімальна вартість в USD для включення у відфільтрований список.
 
         Returns:
             tuple: Кортеж, що містить:
-                   - `filtered_balances` (list): Відфільтрований список балансів.
-                   - `total_balance_usd` (float): Загальна вартість цих балансів у USD.
+                   - `processed_balances` (list): Список кортежів (balance, value_usd).
+                   - `total_usd` (float): Загальна вартість балансів у USD.
         """
-        filtered_balances = []
-        total_balance_usd = 0
+        ignored_assets = config.balance_monitor_ignored_assets
+        processed_balances = []
+        total_usd = 0
         for balance in balances:
             asset = balance['asset']
-            if asset in self.ignored_assets:
+            if asset in ignored_assets:
                 continue
             
             total = float(balance[balance_key])
             try:
                 price = self.client.get_symbol_price(asset)
                 value = total * price
-                total_balance_usd += value
-                # Додаємо до відфільтрованого списку тільки ті активи, вартість яких перевищує `min_value`
-                if value >= min_value:
-                    filtered_balances.append(balance)
+                total_usd += value
+                processed_balances.append((balance, value))
             except SymbolPriceError as e:
                 logger.warning(e)
                 continue
+        return processed_balances, total_usd
+
+    def _process_balances(self, balances, balance_key='total'):
+        """
+        Обробляє список балансів: фільтрує, конвертує в USD та підсумовує.
+
+        Args:
+            balances (list): Список словників з балансами.
+            balance_key (str): Ключ у словнику, де зберігається сума активу.
+
+        Returns:
+            tuple: Кортеж, що містить:
+                   - `filtered_balances` (list): Відфільтрований список балансів.
+                   - `total_balance_usd` (float): Загальна вартість цих балансів у USD.
+        """
+        min_value = config.balance_monitor_min_value_to_display
+        processed_balances, total_balance_usd = self._calculate_balances_usd(balances, balance_key)
+        
+        filtered_balances = [balance for balance, value in processed_balances if value >= min_value]
+        
         return filtered_balances, total_balance_usd
 
     def _get_total_balance_usd(self, balances, balance_key='balance'):
@@ -69,20 +86,7 @@ class BalanceMonitor:
         Returns:
             float: Загальна вартість балансів у USD.
         """
-        total_balance_usd = 0
-        for balance in balances:
-            asset = balance['asset']
-            if asset in self.ignored_assets:
-                continue
-            
-            total = float(balance[balance_key])
-            try:
-                price = self.client.get_symbol_price(asset)
-                value = total * price
-                total_balance_usd += value
-            except SymbolPriceError as e:
-                logger.warning(e)
-                continue
+        _, total_balance_usd = self._calculate_balances_usd(balances, balance_key)
         return total_balance_usd
 
     def _get_and_save_balances(self):
@@ -117,7 +121,7 @@ class BalanceMonitor:
                 "total_balance_usd": total_balance_usd,
             }
         }
-        save_to_json(balances, "output/balance_output.json")
+        save_to_json(balances, config.balance_monitor_output_json_path)
         return balances
 
     def get_balances(self):
@@ -131,7 +135,7 @@ class BalanceMonitor:
             balances = self._get_and_save_balances()
             formatted_balances = format_balances(balances["balances"])
             logger.info(f"Баланси успішно отримано.\n{formatted_balances}")
-            with open("output/balance_output.txt", "w") as f:
+            with open(config.balance_monitor_output_txt_path, "w") as f:
                 f.write(formatted_balances)
         except Exception as e:
             logger.error(f"Під час отримання балансів сталася помилка: {e}", exc_info=True)
@@ -148,13 +152,13 @@ class BalanceMonitor:
             try:
                 balances = self._get_and_save_balances()
                 formatted_balances = format_balances(balances["balances"])
-                with open("output/balance_output.txt", "w") as f:
+                with open(config.balance_monitor_output_txt_path, "w") as f:
                     f.write(formatted_balances)
                 logger.info(f"Дані оновлено о {datetime.now().strftime('%H:%M:%S')}")
-                time.sleep(60) # Пауза на 60 секунд
+                time.sleep(config.balance_monitor_monitoring_interval_seconds)
             except KeyboardInterrupt:
                 logger.info("Моніторинг зупинено користувачем.")
                 break
             except Exception as e:
                 logger.error(f"Під час моніторингу сталася помилка: {e}", exc_info=True)
-                time.sleep(60)
+                time.sleep(config.balance_monitor_monitoring_interval_seconds)

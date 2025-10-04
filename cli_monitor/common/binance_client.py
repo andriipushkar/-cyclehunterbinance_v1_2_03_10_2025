@@ -19,7 +19,6 @@ from .exceptions import SymbolPriceError
 # Створюємо логер для цього модуля
 
 
-
 def _log_retry_attempt(retry_state):
     """
     Функція для логування перед кожною повторною спробою.

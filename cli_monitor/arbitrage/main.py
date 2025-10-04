@@ -8,12 +8,66 @@
 import argparse
 import asyncio
 from loguru import logger
+
 from .cycle_finder import CycleFinder
 from .profit_calculator import main as profit_calculator_main
 from .backtester import Backtester
 from .whitelist_generator import generate_whitelist
 from .blacklist_generator import generate_blacklist
 from .bot import main as start_bot_main
+
+
+class ArbitrageApp:
+    """Клас, що інкапсулює логіку виконання арбітражних команд."""
+
+    def __init__(self, args):
+        """
+        Ініціалізує додаток з аргументами командного рядка.
+
+        Args:
+            args: Аргументи, розпарсені з argparse.
+        """
+        self.args = args
+        self._command_map = {
+            "find-cycles": self._run_find_cycles,
+            "run-monitor": self._run_monitor,
+            "backtest": self._run_backtest,
+            "generate-whitelist": self._run_generate_whitelist,
+            "generate-blacklist": self._run_generate_blacklist,
+            "start-bot": self._run_start_bot,
+        }
+
+    def run(self):
+        """Запускає відповідний метод на основі команди."""
+        command_func = self._command_map.get(self.args.arbitrage_command)
+        if command_func:
+            command_func()
+        else:
+            logger.error(f"Невідома арбітражна команда: {self.args.arbitrage_command}")
+
+    def _run_find_cycles(self):
+        finder = CycleFinder()
+        finder.run(strategy=self.args.strategy)
+
+    def _run_monitor(self):
+        asyncio.run(profit_calculator_main())
+
+    def _run_backtest(self):
+        backtester = Backtester(self.args.start_date, self.args.end_date)
+        asyncio.run(backtester.run())
+
+    def _run_generate_whitelist(self):
+        generate_whitelist()
+
+    def _run_generate_blacklist(self):
+        generate_blacklist()
+
+    def _run_start_bot(self):
+        try:
+            asyncio.run(start_bot_main())
+        except KeyboardInterrupt:
+            logger.info("Роботу бота зупинено користувачем.")
+
 
 def add_arguments(parser):
     """
@@ -40,30 +94,15 @@ def add_arguments(parser):
     whitelist_parser = subparsers.add_parser("generate-whitelist", help="Згенерувати білий список монет.")
     blacklist_parser = subparsers.add_parser("generate-blacklist", help="Згенерувати чорний список монет.")
     
-    # Команда для запуску повноцінн
+    # Команда для запуску повноцінного бота
     start_bot_parser = subparsers.add_parser("start-bot", help="Запустити довготривалого арбітражного бота.")
 
 def run(args):
     """
-    Виконує відповідну функцію на основі переданих аргументів.
+    Створює екземпляр ArbitrageApp та запускає його.
 
     Args:
         args: Аргументи, розпарсені з командного рядка.
     """
-    if args.arbitrage_command == "find-cycles":
-        finder = CycleFinder()
-        finder.run(strategy=args.strategy)
-    elif args.arbitrage_command == "run-monitor":
-        asyncio.run(profit_calculator_main())
-    elif args.arbitrage_command == "backtest":
-        backtester = Backtester(args.start_date, args.end_date)
-        asyncio.run(backtester.run())
-    elif args.arbitrage_command == "generate-whitelist":
-        generate_whitelist()
-    elif args.arbitrage_command == "generate-blacklist":
-        generate_blacklist()
-    elif args.arbitrage_command == "start-bot":
-        try:
-            asyncio.run(start_bot_main())
-        except KeyboardInterrupt:
-            logging.info("Роботу бота зупинено користувачем.")
+    app = ArbitrageApp(args)
+    app.run()

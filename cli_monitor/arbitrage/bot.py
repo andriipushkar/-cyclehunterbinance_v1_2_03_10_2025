@@ -90,7 +90,7 @@ class TradeExecutor:
                     writer.writeheader() # Додаємо заголовок, якщо файл новий
                 writer.writerow(row_data)
         except IOError as e:
-            logging.error(f"[CSV LOG] Помилка запису у файл {file_path}: {e}")
+            logger.error(f"[CSV LOG] Помилка запису у файл {file_path}: {e}")
 
     def _find_optimal_investment_amount(self, order_book, side):
         """
@@ -238,23 +238,23 @@ class TradeExecutor:
         tickers = await asyncio.to_thread(self.client.get_tickers_for_symbols, pairs_in_cycle)
 
         if not tickers or len(tickers) != len(pairs_in_cycle):
-            logging.warning(f"[LIQUIDITY CHECK] Не вдалося отримати дані тікера для циклу {cycle}. Цикл пропущено.")
+            logger.warning(f"[LIQUIDITY CHECK] Не вдалося отримати дані тікера для циклу {cycle}. Цикл пропущено.")
             return
 
         for ticker in tickers:
             volume = Decimal(ticker.get('quoteVolume', '0'))
             if volume < self.min_volume_threshold:
-                logging.warning(f"[LIQUIDITY CHECK] Пара {ticker['symbol']} має недостатній обсяг торгів (${volume:,.2f}). Поріг: ${self.min_volume_threshold:,.2f}. Цикл {cycle} пропущено.")
+                logger.warning(f"[LIQUIDITY CHECK] Пара {ticker['symbol']} має недостатній обсяг торгів (${volume:,.2f}). Поріг: ${self.min_volume_threshold:,.2f}. Цикл {cycle} пропущено.")
                 return
         
-        logging.info(f"[LIQUIDITY CHECK] Усі пари в циклі {cycle} пройшли перевірку на ліквідність.")
+        logger.info(f"[LIQUIDITY CHECK] Усі пари в циклі {cycle} пройшли перевірку на ліквідність.")
         
         # --- Крок 2: Динамічний розрахунок обсягу інвестиції ---
         # Визначаємо оптимальний обсяг для першої угоди в циклі, щоб мінімізувати прослизання.
         first_step = cycle.steps[0]
         first_pair_order_book = self.client.get_order_book(first_step['pair'])
         if not first_pair_order_book:
-            logging.error(f"[DRY RUN] Не вдалося отримати стакан ордерів для першого кроку: {first_step['pair']}")
+            logger.error(f"[DRY RUN] Не вдалося отримати стакан ордерів для першого кроку: {first_step['pair']}")
             return
 
         first_side = "BUY" if first_step['from'] == self.exchange_info[first_step['pair']]['quoteAsset'] else "SELL"
@@ -262,9 +262,9 @@ class TradeExecutor:
         # Використовуємо менше з двох значень: налаштованої початкової інвестиції або розрахованої оптимальної.
         current_amount = min(self.initial_investment, optimal_investment)
         
-        logging.info("="*50)
-        logging.info(f"[DRY RUN] ОТРИМАНО ПРИБУТКОВИЙ ЦИКЛ: {cycle} | Прибуток: {profit_pct:.4f}%")
-        logging.info(f"[DRY RUN] Початкова інвестиція (скоригована): {current_amount:.8f} {cycle.steps[0]['from']}")
+        logger.info("="*50)
+        logger.info(f"[DRY RUN] ОТРИМАНО ПРИБУТКОВИЙ ЦИКЛ: {cycle} | Прибуток: {profit_pct:.4f}%")
+        logger.info(f"[DRY RUN] Початкова інвестиція (скоригована): {current_amount:.8f} {cycle.steps[0]['from']}")
 
         current_asset = cycle.steps[0]['from']
 
@@ -275,18 +275,18 @@ class TradeExecutor:
             to_asset = step['to']
             
             if current_asset != from_asset:
-                logging.error(f"[DRY RUN] Помилка логіки: поточний актив {current_asset} не співпадає з очікуваним {from_asset}")
+                logger.error(f"[DRY RUN] Помилка логіки: поточний актив {current_asset} не співпадає з очікуваним {from_asset}")
                 return
 
             # Отримуємо актуальний стакан ордерів для поточної пари
             order_book = self.client.get_order_book(pair)
             if not order_book:
-                logging.error(f"[DRY RUN] Не вдалося отримати стакан ордерів для пари {pair}")
+                logger.error(f"[DRY RUN] Не вдалося отримати стакан ордерів для пари {pair}")
                 return
 
             pair_info = self.exchange_info.get(pair)
             if not pair_info:
-                logging.error(f"[DRY RUN] Не вдалося знайти інформацію про пару {pair}")
+                logger.error(f"[DRY RUN] Не вдалося знайти інформацію про пару {pair}")
                 return
 
             base_asset = pair_info['baseAsset']
@@ -300,31 +300,31 @@ class TradeExecutor:
                 side = "SELL"
             
             if side is None:
-                logging.error(f"[DRY RUN] Не вдалося визначити напрямок торгівлі для кроку {step}")
+                logger.error(f"[DRY RUN] Не вдалося визначити напрямок торгівлі для кроку {step}")
                 return
 
             # Розраховуємо результат угоди на основі стакану
             avg_price, filled_amount = self._calculate_execution_price(order_book, side, current_amount)
 
             if avg_price is None or filled_amount is None:
-                logging.error(f"[DRY RUN] Не вдалося розрахувати ціну виконання для {pair} з обсягом {current_amount}")
+                logger.error(f"[DRY RUN] Не вдалося розрахувати ціну виконання для {pair} з обсягом {current_amount}")
                 return
 
             # Оновлюємо поточний актив та його кількість для наступного кроку
             if side == "BUY":
-                logging.info(f"[DRY RUN] Крок {i+1}: {side} {filled_amount:.8f} {to_asset} за середньою ціною {avg_price:.8f} (пара {pair})")
+                logger.info(f"[DRY RUN] Крок {i+1}: {side} {filled_amount:.8f} {to_asset} за середньою ціною {avg_price:.8f} (пара {pair})")
                 current_amount = filled_amount
                 current_asset = to_asset
             else: # SELL
-                logging.info(f"[DRY RUN] Крок {i+1}: {side} {current_amount:.8f} {from_asset} за середньою ціною {avg_price:.8f} (пара {pair})")
+                logger.info(f"[DRY RUN] Крок {i+1}: {side} {current_amount:.8f} {from_asset} за середньою ціною {avg_price:.8f} (пара {pair})")
                 current_amount = filled_amount
                 current_asset = to_asset
         
         final_amount = current_amount
         final_asset = current_asset
 
-        logging.info(f"[DRY RUN] Очікуваний кінцевий баланс: {final_amount:.8f} {final_asset}")
-        logging.info("="*50)
+        logger.info(f"[DRY RUN] Очікуваний кінцевий баланс: {final_amount:.8f} {final_asset}")
+        logger.info("="*50)
 
         # --- Крок 4: Логування результату ---
         await self._log_to_csv(
@@ -354,34 +354,34 @@ class ArbitrageBot:
         Виконує початкові кроки налаштування, необхідні для роботи бота.
         Цей метод запускається один раз при старті.
         """
-        logging.info("Початок налаштування...")
+        logger.info("Початок налаштування...")
         
         # 1. Генерація білого списку найліквідніших активів
-        logging.info("Генерація білого списку...")
+        logger.info("Генерація білого списку...")
         generate_whitelist()
         
         # 2. Генерація чорного списку найменш ліквідних активів
-        logging.info("Генерація чорного списку...")
+        logger.info("Генерація чорного списку...")
         generate_blacklist()
 
         finder = CycleFinder()
 
         # 3. Отримання та збереження списку монет, що будуть моніторитись
-        logging.info("Отримання списку монет для моніторингу...")
+        logger.info("Отримання списку монет для моніторингу...")
         allowed_coins = finder.get_allowed_coins(strategy='liquidity')
         if allowed_coins:
             try:
                 with open("output/monitored_coins.txt", "w") as f:
                     f.write("\n".join(sorted(list(allowed_coins))))
-                logging.info(f"Список з {len(allowed_coins)} монет, що моніторяться, збережено у output/monitored_coins.txt")
+                logger.info(f"Список з {len(allowed_coins)} монет, що моніторяться, збережено у output/monitored_coins.txt")
             except IOError as e:
-                logging.error(f"Помилка збереження списку монет: {e}")
+                logger.error(f"Помилка збереження списку монет: {e}")
         
         # 4. Пошук всіх можливих арбітражних циклів на основі білого списку
-        logging.info("Пошук арбітражних циклів на основі білого списку...")
+        logger.info("Пошук арбітражних циклів на основі білого списку...")
         finder.run(strategy='liquidity')
         
-        logging.info("Налаштування завершено.")
+        logger.info("Налаштування завершено.")
 
     async def start(self):
         """
@@ -396,7 +396,7 @@ class ArbitrageBot:
             profitable_cycles_queue = asyncio.Queue()
             self.profit_monitor = ProfitMonitor(profitable_cycles_queue=profitable_cycles_queue)
             monitor_task = asyncio.create_task(self.profit_monitor.start())
-            logging.info("Монітор прибутковості запущено. Очікування на вигідні цикли...")
+            logger.info("Монітор прибутковості запущено. Очікування на вигідні цикли...")
 
             # Крок 3: Обробка циклів з черги
             # Цей цикл безкінечно чекає на нові елементи в черзі.
@@ -410,11 +410,11 @@ class ArbitrageBot:
 
         except asyncio.CancelledError:
             # Обробка зупинки бота (наприклад, через Ctrl+C)
-            logging.info("Роботу бота зупинено.")
+            logger.info("Роботу бота зупинено.")
             if self.profit_monitor:
                 await self.profit_monitor.stop()
         except Exception as e:
-            logging.error(f"В головному циклі бота сталася неочікувана помилка: {e}", exc_info=True)
+            logger.error(f"В головному циклі бота сталася неочікувана помилка: {e}", exc_info=True)
             if self.profit_monitor:
                 await self.profit_monitor.stop()
 

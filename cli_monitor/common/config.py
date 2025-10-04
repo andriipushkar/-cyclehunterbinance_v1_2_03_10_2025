@@ -46,6 +46,13 @@ class Config:
         self.blacklist_bottom_n_pairs = 100
         self.max_slippage_pct = Decimal('0.1')
 
+        # Balance monitor settings
+        self.balance_monitor_ignored_assets = []
+        self.balance_monitor_min_value_to_display = 1
+        self.balance_monitor_output_json_path = "output/balance_output.json"
+        self.balance_monitor_output_txt_path = "output/balance_output.txt"
+        self.balance_monitor_monitoring_interval_seconds = 60
+
     def load_config(self):
         """
         Завантажує основний конфігураційний файл `config.json`.
@@ -78,6 +85,13 @@ class Config:
         self.whitelist_top_n_pairs = config_data.get('whitelist_top_n_pairs', self.whitelist_top_n_pairs)
         self.blacklist_bottom_n_pairs = config_data.get('blacklist_bottom_n_pairs', self.blacklist_bottom_n_pairs)
         self.max_slippage_pct = Decimal(config_data.get('max_slippage_pct', self.max_slippage_pct))
+
+        balance_monitor_config = config_data.get('balance_monitor', {})
+        self.balance_monitor_ignored_assets = balance_monitor_config.get('ignored_assets', self.balance_monitor_ignored_assets)
+        self.balance_monitor_min_value_to_display = balance_monitor_config.get('min_value_to_display', self.balance_monitor_min_value_to_display)
+        self.balance_monitor_output_json_path = balance_monitor_config.get('output_json_path', self.balance_monitor_output_json_path)
+        self.balance_monitor_output_txt_path = balance_monitor_config.get('output_txt_path', self.balance_monitor_output_txt_path)
+        self.balance_monitor_monitoring_interval_seconds = balance_monitor_config.get('monitoring_interval_seconds', self.balance_monitor_monitoring_interval_seconds)
 
 # Створюємо єдиний екземпляр класу Config, який буде імпортуватися в інші модулі.
 # Це реалізує патерн Singleton, забезпечуючи, що всі частини програми
