@@ -1,8 +1,8 @@
 {
   "base_currency": "USDT",
-  "initial_investment_usd": 15,
+  "initial_investment_usd": 50,
   "trading_fee": "0.001",
-  "min_profit_threshold": "-1.01",
+  "min_profit_threshold": "1.00",
   "min_trade_volume_usd": 100000,
   "max_cycle_length": 4,
   "monitored_coins": [

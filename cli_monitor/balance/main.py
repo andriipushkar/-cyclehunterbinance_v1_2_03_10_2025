@@ -6,6 +6,7 @@
 """
 
 import argparse
+import asyncio
 from .commands import BalanceMonitor
 
 class BalanceApp:
@@ -24,22 +25,22 @@ class BalanceApp:
             "monitor": self._run_monitor,
         }
 
-    def run(self):
+    async def run(self):
         """Запускає відповідний метод на основі команди."""
         command_func = self._command_map.get(self.args.balance_command)
         if command_func:
-            command_func()
+            await command_func()
         else:
             # Цей код не має виконуватись завдяки `required=True` в add_subparsers
             print(f"Невідома команда балансу: {self.args.balance_command}")
 
-    def _run_get(self):
-        monitor = BalanceMonitor()
-        monitor.get_balances()
+    async def _run_get(self):
+        monitor = await BalanceMonitor.create()
+        await monitor.get_balances()
 
-    def _run_monitor(self):
-        monitor = BalanceMonitor()
-        monitor.monitor_balances()
+    async def _run_monitor(self):
+        monitor = await BalanceMonitor.create()
+        await monitor.monitor_balances()
 
 def add_arguments(parser):
     """
@@ -56,7 +57,7 @@ def add_arguments(parser):
     # Команда для запуску безперервного моніторингу балансу
     monitor_parser = subparsers.add_parser("monitor", help="Відстежувати баланси безперервно.")
 
-def run(args):
+async def run(args):
     """
     Створює екземпляр BalanceApp та запускає його.
 
@@ -64,4 +65,4 @@ def run(args):
         args: Аргументи, розпарсені з командного рядка.
     """
     app = BalanceApp(args)
-    app.run()
+    await app.run()

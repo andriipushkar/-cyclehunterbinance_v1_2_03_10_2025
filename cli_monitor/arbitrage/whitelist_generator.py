@@ -1,7 +1,4 @@
-"""
-Модуль для генерації "білого списку" (whitelist) монет та торгових пар.
-"""
-
+import asyncio
 from decimal import Decimal
 from loguru import logger
 
@@ -13,7 +10,7 @@ class WhitelistGenerator(BaseListGenerator):
     Генерує білий список активів та пар на основі критеріїв ліквідності.
     """
 
-    def _generate_list(self):
+    async def _generate_list(self):
         """Реалізує логіку фільтрації та створення білого списку."""
         logger.info("Початок генерації білого списку...")
 
@@ -49,7 +46,7 @@ class WhitelistGenerator(BaseListGenerator):
 
         logger.info(f"Білий список згенеровано: {len(whitelist_assets)} активів та {len(whitelist_pairs)} пар.")
 
-        self._save_list(
+        await self._save_list(
             data={
                 "whitelist_assets": sorted(list(whitelist_assets)),
                 "whitelist_pairs": sorted(list(whitelist_pairs))
@@ -87,11 +84,11 @@ class WhitelistGenerator(BaseListGenerator):
         return True
 
 
-def generate_whitelist():
+async def generate_whitelist():
     """Точка входу для запуску генератора білого списку."""
-    generator = WhitelistGenerator()
-    generator.run()
+    generator = await WhitelistGenerator.create()
+    await generator.run()
 
 
 if __name__ == '__main__':
-    generate_whitelist()
+    asyncio.run(generate_whitelist())

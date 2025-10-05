@@ -8,9 +8,9 @@
 
 from loguru import logger
 from decimal import Decimal
-from binance.client import Client
+from binance import AsyncClient
 from binance.exceptions import BinanceAPIException, BinanceRequestException
-from requests.exceptions import ConnectionError
+from aiohttp.client_exceptions import ClientConnectorError
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
 from .config import config
@@ -36,7 +36,7 @@ def _log_retry_attempt(retry_state):
 api_retry = retry(
     wait=wait_exponential(multiplier=1, min=2, max=30),
     stop=stop_after_attempt(5),
-    retry=retry_if_exception_type((ConnectionError, BinanceAPIException, BinanceRequestException)),
+    retry=retry_if_exception_type((ClientConnectorError, BinanceAPIException, BinanceRequestException)),
     before_sleep=_log_retry_attempt
 )
 
@@ -46,32 +46,36 @@ class BinanceClient:
     def __init__(self):
         """
         Ініціалізує клієнт Binance.
-
-        Використовує API ключ та секрет з конфігурації для створення екземпляра
-        клієнта. Також виконує `ping` до сервера Binance для перевірки
-        з'єднання та валідності ключів.
         """
         self._trade_fees = {}
         self.client = None
-        self._connect()
+
+    @classmethod
+    async def create(cls):
+        """
+        Створює та асинхронно ініціалізує екземпляр BinanceClient.
+        """
+        self = cls()
+        await self._connect()
+        return self
 
     @api_retry
-    def _connect(self):
+    async def _connect(self):
         """Встановлює з'єднання з Binance API."""
         try:
-            self.client = Client(config.api_key, config.api_secret)
-            self.client.ping()
+            self.client = await AsyncClient.create(config.api_key, config.api_secret)
+            await self.client.ping()
             logger.info("Успішно підключено до API Binance.")
-        except (BinanceAPIException, BinanceRequestException, ConnectionError) as e:
+        except (BinanceAPIException, BinanceRequestException, ClientConnectorError) as e:
             logger.error(f"Помилка підключення до API Binance: {e}")
             raise
 
     @api_retry
-    def get_spot_balance(self):
+    async def get_spot_balance(self):
         """
         Отримує баланс спотового гаманця.
         """
-        account = self.client.get_account()
+        account = await self.client.get_account()
         balances = account.get('balances', [])
         return [
             {"asset": b["asset"], "total": b["free"]}
@@ -80,11 +84,11 @@ class BinanceClient:
         ]
 
     @api_retry
-    def get_futures_balance(self):
+    async def get_futures_balance(self):
         """
         Отримує баланс ф'ючерсного гаманця.
         """
-        account = self.client.futures_account_balance()
+        account = await self.client.futures_account_balance()
         return [
             {"asset": b["asset"], "balance": b["balance"]}
             for b in account
@@ -92,30 +96,30 @@ class BinanceClient:
         ]
 
     @api_retry
-    def get_symbol_price(self, asset):
+    async def get_symbol_price(self, asset):
         """
         Отримує ціну активу відносно USDT.
         """
         if asset in ['USDT', 'USDC', 'BUSD', 'TUSD', 'DAI', 'PAX', 'HUSD']:
             return 1.0
         try:
-            ticker = self.client.get_symbol_ticker(symbol=f"{asset}USDT")
+            ticker = await self.client.get_symbol_ticker(symbol=f"{asset}USDT")
             return float(ticker['price'])
         except (BinanceAPIException, BinanceRequestException) as e:
             raise SymbolPriceError(f"Не вдалося отримати ціну для {asset}: {e}") from e
 
     @api_retry
-    def get_earn_balance(self):
+    async def get_earn_balance(self):
         """
         Отримує баланс гаманця "Earn" (Simple Earn).
         """
         earn_balances = []
-        flexible_positions = self.client.get_simple_earn_flexible_product_position()
+        flexible_positions = await self.client.get_simple_earn_flexible_product_position()
         if flexible_positions and 'rows' in flexible_positions:
             for position in flexible_positions['rows']:
                 earn_balances.append({"asset": position['asset'], "total": position['totalAmount']})
 
-        locked_positions = self.client.get_simple_earn_locked_product_position()
+        locked_positions = await self.client.get_simple_earn_locked_product_position()
         if locked_positions and 'rows' in locked_positions:
             for position in locked_positions['rows']:
                 found = False
@@ -129,51 +133,51 @@ class BinanceClient:
         return earn_balances
 
     @api_retry
-    def get_exchange_info(self):
+    async def get_exchange_info(self):
         """
         Отримує загальну інформацію про біржу (ліміти, торгові пари тощо).
         """
-        return self.client.get_exchange_info()
+        return await self.client.get_exchange_info()
 
     @api_retry
-    def get_24h_ticker(self):
+    async def get_24h_ticker(self):
         """
         Отримує статистику цін за останні 24 години для всіх пар.
         """
-        return self.client.get_ticker()
+        return await self.client.get_ticker()
 
     @api_retry
-    def get_tickers_for_symbols(self, symbols):
+    async def get_tickers_for_symbols(self, symbols):
         """
         Отримує статистику цін за останні 24 години для списку пар.
         """
         # Використовуємо list comprehension для більш чистого коду
-        return [self.client.get_ticker(symbol=symbol) for symbol in symbols]
+        return [await self.client.get_ticker(symbol=symbol) for symbol in symbols]
 
     @api_retry
-    def get_trade_fees(self):
+    async def get_trade_fees(self):
         """
         Отримує торгові комісії для всіх пар і кешує їх.
         """
         if self._trade_fees:
             return self._trade_fees
         
-        fees = self.client.get_trade_fee()
+        fees = await self.client.get_trade_fee()
         if fees and 'tradeFee' in fees:
             for fee in fees['tradeFee']:
                 self._trade_fees[fee['symbol']] = Decimal(fee['takerCommission'])
         return self._trade_fees
 
     @api_retry
-    def get_trade_fee(self, symbol):
+    async def get_trade_fee(self, symbol):
         """
         Отримує торгову комісію для конкретної торгової пари.
         """
         if not self._trade_fees:
-            self.get_trade_fees()
+            await self.get_trade_fees()
         
         if symbol not in self._trade_fees:
-            fees = self.client.get_trade_fee(symbol=symbol)
+            fees = await self.client.get_trade_fee(symbol=symbol)
             if fees and 'tradeFee' in fees and len(fees['tradeFee']) > 0:
                 fee = Decimal(fees['tradeFee'][0]['takerCommission'])
                 self._trade_fees[symbol] = fee
@@ -183,13 +187,13 @@ class BinanceClient:
         return self._trade_fees.get(symbol)
 
     @api_retry
-    def get_order_book(self, symbol):
+    async def get_order_book(self, symbol):
         """
         Отримує стакан ордерів (order book) для вказаної пари.
         """
-        return self.client.get_order_book(symbol=symbol)
+        return await self.client.get_order_book(symbol=symbol)
 
-    def create_market_order(self, symbol, side, quantity, dry_run=True):
+    async def create_market_order(self, symbol, side, quantity, dry_run=True):
         """
         Створює ринковий ордер (Market Order).
         Цей метод не обгорнутий в retry, оскільки повторне відправлення ордера може бути небезпечним.
@@ -209,3 +213,8 @@ class BinanceClient:
             }
         
         return None
+
+    async def close_connection(self):
+        if self.client:
+            await self.client.close_connection()
+            logger.info("З'єднання з API Binance закрито.")

@@ -10,17 +10,18 @@
 
 import argparse
 import sys
+import asyncio
 from .balance import main as balance_main
 from .arbitrage import main as arbitrage_main
 from .common.config import config
 from .common.logging_setup import setup_logging
 
-def main():
+async def main():
     """
     Головна функція, що виконується при запуску `python3 -m cli_monitor`.
     """
     # Завантажуємо конфігурацію з файлів .env та config.json
-    config.load_configs()
+    await config.load_configs()
     
     # Налаштовуємо логування
     setup_logging()
@@ -47,9 +48,9 @@ def main():
 
     # Викликаємо відповідний обробник для вибраної команди
     if args.command == "balance":
-        balance_main.run(args)
+        await balance_main.run(args)
     elif args.command == "arbitrage":
-        arbitrage_main.run(args)
+        await arbitrage_main.run(args)
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())

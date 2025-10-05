@@ -1,26 +1,17 @@
-"""
-Цей модуль реалізує моніторинг прибутковості арбітражних циклів у реальному часі.
-
-Він підключається до WebSocket стрімів Binance для отримання цін, розраховує
-прибутковість для знайдених циклів і логує вигідні можливості.
-"""
-
 import asyncio
 import json
 import os
-import logging
-import websockets
+import aiofiles
 from loguru import logger
 from datetime import datetime
 from decimal import Decimal, getcontext
 from cli_monitor.common.binance_client import BinanceClient
 from cli_monitor.common.config import config
 from cli_monitor.common.utils import structure_cycles_and_get_pairs
+from cli_monitor.core.websocket.client import WebSocketClient
 
 from . import constants
 from .cycle import Cycle
-
-
 
 class ProfitMonitor:
     """Клас для розрахунку та логування арбітражних можливостей."""
@@ -28,58 +19,63 @@ class ProfitMonitor:
     def __init__(self, profitable_cycles_queue=None):
         """Ініціалізує монітор прибутковості."""
         self.profitable_cycles_queue = profitable_cycles_queue
+        self.message_queue = asyncio.Queue()
         self.latest_prices = {}  # Словник для зберігання останніх цін (ask/bid)
         self.pair_to_cycles = {}  # Відображення торгової пари на цикли, в які вона входить
         self.latest_profits_by_cycle = {}  # Словник для зберігання останньої розрахованої прибутковості для кожного циклу
         self.profits_lock = asyncio.Lock()  # Блокування для безпечного доступу до `latest_profits_by_cycle`
-        self._load_latest_prices()  # Завантаження останніх збережених цін
         self.structured_cycles = []  # Список структурованих об'єктів циклів
         self.tasks = []  # Список для зберігання запущених асинхронних завдань
 
-    def _load_latest_prices(self):
+    import aiofiles
+
+    async def _load_latest_prices(self):
         """Завантажує останні ціни з файлу, якщо він існує."""
         if os.path.exists(constants.LATEST_PRICES_FILE):
-            with open(constants.LATEST_PRICES_FILE, 'r') as f:
-                self.latest_prices = json.load(f)
+            async with aiofiles.open(constants.LATEST_PRICES_FILE, 'r') as f:
+                content = await f.read()
+                self.latest_prices = json.loads(content)
 
-    def _write_to_file(self, path, content):
-        """Синхронний метод для запису текстового контенту у файл."""
-        with open(path, 'w') as f:
-            f.write(content)
+    async def _write_to_file(self, path, content):
+        """Асинхронний метод для запису текстового контенту у файл."""
+        async with aiofiles.open(path, 'w') as f:
+            await f.write(content)
 
-    def _write_json_to_file(self, path, data):
-        """Синхронний метод для запису JSON даних у файл."""
-        with open(path, 'w') as f:
-            json.dump(data, f, indent=2)
+    async def _write_json_to_file(self, path, data):
+        """Асинхронний метод для запису JSON даних у файл."""
+        async with aiofiles.open(path, 'w') as f:
+            await f.write(json.dumps(data, indent=2))
 
     async def _save_latest_prices(self):
         """Асинхронно зберігає останні ціни у файл."""
         try:
-            await asyncio.to_thread(self._write_json_to_file, constants.LATEST_PRICES_FILE, self.latest_prices)
+            await self._write_json_to_file(constants.LATEST_PRICES_FILE, self.latest_prices)
         except Exception as e:
-            logging.error(f"Помилка збереження останніх цін: {e}")
+            logger.error(f"Помилка збереження останніх цін: {e}")
 
-    def get_exchange_info_map(self):
+    async def get_exchange_info_map(self):
         """Отримує інформацію про всі торгові символи і створює з неї словник."""
         try:
-            client = BinanceClient()
-            exchange_info = client.get_exchange_info()
+            client = await BinanceClient.create()
+            exchange_info = await client.get_exchange_info()
+            await client.close_connection()
             return {s['symbol']: s for s in exchange_info['symbols']}
         except Exception as e:
-            logging.error(f"Помилка отримання інформації з біржі Binance: {e}")
+            logger.error(f"Помилка отримання інформації з біржі Binance: {e}")
             return None
 
-    def _load_cycles(self):
+    async def _load_cycles(self):
         """Завантажує знайдені цикли з файлу."""
         if not os.path.exists(constants.POSSIBLE_CYCLES_FILE):
-            logging.error(f"Помилка: Не вдалося знайти файл з циклами: {constants.POSSIBLE_CYCLES_FILE}")
+            logger.error(f"Помилка: Не вдалося знайти файл з циклами: {constants.POSSIBLE_CYCLES_FILE}")
             return None
-        with open(constants.POSSIBLE_CYCLES_FILE, 'r') as f:
-            return json.load(f)
+        async with aiofiles.open(constants.POSSIBLE_CYCLES_FILE, 'r') as f:
+            content = await f.read()
+            return json.loads(content)
 
-    def load_cycles_and_map_pairs(self, symbols_info):
+    async def load_cycles_and_map_pairs(self, symbols_info):
         """Завантажує цикли, структурує їх і створює карту `pair_to_cycles`."""
-        cycles_coins = self._load_cycles()
+        cycles_coins = await self._load_cycles()
         if cycles_coins is None:
             return [], set()
 
@@ -103,9 +99,9 @@ class ProfitMonitor:
         for cycle_str, profit in sorted_cycles:
             txt_content += f"Цикл: {cycle_str}, Прибуток: {profit:.4f}%\n"
         try:
-            await asyncio.to_thread(self._write_to_file, constants.ALL_PROFITS_TXT_FILE, txt_content)
+            await self._write_to_file(constants.ALL_PROFITS_TXT_FILE, txt_content)
         except Exception as e:
-            logging.error(f"Помилка запису в all_profits.txt: {e}")
+            logger.error(f"Помилка запису в all_profits.txt: {e}")
 
     async def _write_profits_to_json(self, sorted_cycles, timestamp):
         """Записує останні прибутки у JSON файл."""
@@ -114,9 +110,9 @@ class ProfitMonitor:
             "profits": [{"cycle": cycle_str, "profit_pct": f"{profit:.4f}"} for cycle_str, profit in sorted_cycles]
         }
         try:
-            await asyncio.to_thread(self._write_json_to_file, constants.ALL_PROFITS_JSON_FILE, json_data)
+            await self._write_json_to_file(constants.ALL_PROFITS_JSON_FILE, json_data)
         except Exception as e:
-            logging.error(f"Помилка запису в all_profits.json: {e}")
+            logger.error(f"Помилка запису в all_profits.json: {e}")
 
     async def log_all_profits_periodically(self):
         """Періодично записує останню прибутковість для кожного циклу у файли."""
@@ -133,7 +129,7 @@ class ProfitMonitor:
                 cycle_str = str(cycle)
                 all_profits[cycle_str] = latest_profits_copy.get(cycle_str, Decimal('-1.0'))
 
-            sorted_cycles = sorted(all_profits.items(), key=lambda item: item[1], reverse=True)
+            sorted_cycles = sorted(all_profits.items(), key=lambda item: float(item[1]), reverse=True)
 
             await self._write_profits_to_txt(sorted_cycles, timestamp)
             await self._write_profits_to_json(sorted_cycles, timestamp)
@@ -155,9 +151,9 @@ class ProfitMonitor:
             f"ПРИБУТОК: {profit_pct:.4f}%\n"
             f"Ціни: {prices}\n---\n"
         )
-        logging.info(txt_log_message)
-        with open(hour_file_path_txt, 'a') as f:
-            f.write(txt_log_message)
+        logger.info(txt_log_message)
+        async with aiofiles.open(hour_file_path_txt, 'a') as f:
+            await f.write(txt_log_message)
         
         if self.profitable_cycles_queue:
             await self.profitable_cycles_queue.put({"cycle": cycle, "profit_pct": profit_pct, "prices": prices})
@@ -172,7 +168,7 @@ class ProfitMonitor:
 
         try:
             profit_pct = cycle.calculate_profit(self.latest_prices, symbols_info, trade_fees)
-            logging.debug(f"Calculated profit for {cycle}: {profit_pct:.4f}%")
+            logger.debug(f"Calculated profit for {cycle}: {profit_pct:.4f}%")
             
             cycle_str = str(cycle)
             async with self.profits_lock:
@@ -183,7 +179,7 @@ class ProfitMonitor:
                 await self._log_profitable_opportunity(cycle, profit_pct, prices)
 
         except (KeyError, ValueError) as e:
-            logging.debug(f"Помилка розрахунку для циклу {cycle}: {type(e).__name__} - {e}")
+            logger.debug(f"Помилка розрахунку для циклу {cycle}: {type(e).__name__} - {e}")
 
     async def _handle_websocket_message(self, message, symbols_info, trade_fees, min_profit_threshold):
         """Обробляє повідомлення, отримане з WebSocket."""
@@ -193,82 +189,73 @@ class ProfitMonitor:
         self.latest_prices[pair_symbol] = {'b': data['b'], 'a': data['a']}
         
         if pair_symbol in self.pair_to_cycles:
-            for cycle in self.pair_to_cycles[pair_symbol]:
-                await self.calculate_and_log_profit(cycle, symbols_info, trade_fees, min_profit_threshold)
+            tasks = [self.calculate_and_log_profit(cycle, symbols_info, trade_fees, min_profit_threshold) for cycle in self.pair_to_cycles[pair_symbol]]
+            await asyncio.gather(*tasks)
 
-    async def listen_to_chunk(self, chunk, symbols_info, trade_fees, min_profit_threshold):
-        """Підключається до WebSocket для частини пар і слухає повідомлення."""
-        streams = [f'{pair.lower()}@bookTicker' for pair in chunk]
-        ws_url = f"wss://stream.binance.com:9443/stream?streams={'/'.join(streams)}"
-        
+    async def process_messages(self, symbols_info, trade_fees, min_profit_threshold):
+        """Обробляє повідомлення з черги WebSocket."""
         while True:
-            try:
-                async with websockets.connect(ws_url, ping_timeout=60) as ws:
-                    logging.info(f"Підключено до стріму для {len(chunk)} пар.")
-                    while True:
-                        message = await ws.recv()
-                        await self._handle_websocket_message(message, symbols_info, trade_fees, min_profit_threshold)
-            except (websockets.exceptions.ConnectionClosedError, websockets.exceptions.InvalidStatusCode) as e:
-                logging.warning(f"Помилка з'єднання WebSocket: {e}. Перепідключення...")
-                await asyncio.sleep(5) # Пауза перед перепідключенням
-            except Exception as e:
-                logging.error(f"Неочікувана помилка WebSocket: {e}")
-                break
+            message = await self.message_queue.get()
+            await self._handle_websocket_message(message, symbols_info, trade_fees, min_profit_threshold)
 
-    def _setup(self):
+    async def _setup(self):
         """Виконує початкове налаштування монітора."""
-        logging.info("Запуск Монітора Прибутковості...")
+        await self._load_latest_prices()
+        logger.info("Запуск Монітора Прибутковості...")
         os.makedirs(constants.LOG_DIR, exist_ok=True)
         os.makedirs(constants.OUTPUT_DIR, exist_ok=True)
 
         min_profit_threshold = Decimal(config.min_profit_threshold)
 
-        client = BinanceClient()
-        symbols_info = self.get_exchange_info_map()
+        client = await BinanceClient.create()
+        symbols_info = await self.get_exchange_info_map()
         if not symbols_info:
             return None, None, None, None
 
-        self.structured_cycles, all_trade_pairs = self.load_cycles_and_map_pairs(symbols_info)
+        self.structured_cycles, all_trade_pairs = await self.load_cycles_and_map_pairs(symbols_info)
         if not self.structured_cycles:
-            logging.warning("Не знайдено валідних циклів для моніторингу.")
+            logger.warning("Не знайдено валідних циклів для моніторингу.")
             return None, None, None, None
 
-        trade_fees = client.get_trade_fees()
+        trade_fees = await client.get_trade_fees()
+        await client.close_connection()
 
-        logging.info(f"Моніторинг {len(self.structured_cycles)} циклів, що включають {len(all_trade_pairs)} пар.")
+        logger.info(f"Моніторинг {len(self.structured_cycles)} циклів, що включають {len(all_trade_pairs)} пар.")
         return symbols_info, all_trade_pairs, trade_fees, min_profit_threshold
 
     async def start(self):
         """Основна функція для запуску моніторингу."""
-        symbols_info, all_trade_pairs, trade_fees, min_profit_threshold = self._setup()
+        symbols_info, all_trade_pairs, trade_fees, min_profit_threshold = await self._setup()
         if not symbols_info:
             return
 
+        websocket_client = WebSocketClient(self.message_queue)
         pair_chunks = [list(all_trade_pairs)[i:i + constants.CHUNK_SIZE] for i in range(0, len(all_trade_pairs), constants.CHUNK_SIZE)]
 
-        listener_tasks = [asyncio.create_task(self.listen_to_chunk(chunk, symbols_info, trade_fees, min_profit_threshold)) for chunk in pair_chunks]
+        listener_tasks = [asyncio.create_task(websocket_client.listen(chunk)) for chunk in pair_chunks]
+        processing_task = asyncio.create_task(self.process_messages(symbols_info, trade_fees, min_profit_threshold))
         logger_task = asyncio.create_task(self.log_all_profits_periodically())
 
-        self.tasks = listener_tasks + [logger_task]
+        self.tasks = listener_tasks + [processing_task, logger_task]
         await asyncio.gather(*self.tasks)
 
     async def stop(self):
         """Зупиняє монітор прибутковості, скасовуючи всі завдання."""
-        logging.info("Зупинка Монітора Прибутковості...")
+        logger.info("Зупинка Монітора Прибутковості...")
         for task in self.tasks:
             task.cancel()
         await asyncio.gather(*self.tasks, return_exceptions=True)
-        logging.info("Монітор Прибутковості зупинено.")
+        logger.info("Монітор Прибутковості зупинено.")
 
 async def main():
     monitor = ProfitMonitor()
     try:
         await monitor.start()
     except asyncio.CancelledError:
-        logging.info("Головне завдання моніторингу було скасовано.")
+        logger.info("Головне завдання моніторингу було скасовано.")
 
 if __name__ == "__main__":
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
-        logging.info("\nМоніторинг зупинено користувачем.")
+        logger.info("\nМоніторинг зупинено користувачем.")

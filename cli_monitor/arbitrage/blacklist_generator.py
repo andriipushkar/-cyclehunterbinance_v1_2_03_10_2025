@@ -3,6 +3,7 @@
 """
 
 import json
+import aiofiles
 from decimal import Decimal
 from loguru import logger
 
@@ -14,12 +15,12 @@ class BlacklistGenerator(BaseListGenerator):
     Генерує чорний список активів та пар з найнижчою ліквідністю.
     """
 
-    def _generate_list(self):
+    async def _generate_list(self):
         """Реалізує логіку фільтрації та створення чорного списку."""
         logger.info("Початок генерації чорного списку...")
 
         bottom_n_pairs = self.config.blacklist_bottom_n_pairs
-        whitelist_pairs_set = self._load_whitelist()
+        whitelist_pairs_set = await self._load_whitelist()
         if whitelist_pairs_set is None:
             return
 
@@ -56,7 +57,7 @@ class BlacklistGenerator(BaseListGenerator):
 
         logger.info(f"Чорний список згенеровано: {len(blacklist_assets)} активів та {len(blacklist_pairs)} пар.")
 
-        self._save_list(
+        await self._save_list(
             data={
                 "blacklist_assets": sorted(list(blacklist_assets)),
                 "blacklist_pairs": sorted(list(blacklist_pairs))
@@ -64,12 +65,13 @@ class BlacklistGenerator(BaseListGenerator):
             output_path="configs/blacklist.json"
         )
 
-    def _load_whitelist(self):
+    async def _load_whitelist(self):
         """Завантажує пари з білого списку для їх виключення."""
         whitelist_path = "configs/whitelist.json"
         try:
-            with open(whitelist_path, 'r') as f:
-                whitelist_data = json.load(f)
+            async with aiofiles.open(whitelist_path, 'r') as f:
+                content = await f.read()
+                whitelist_data = json.loads(content)
             whitelist_pairs_set = set(whitelist_data.get('whitelist_pairs', []))
             logger.info(f"Завантажено {len(whitelist_pairs_set)} пар з білого списку для виключення.")
             return whitelist_pairs_set
@@ -81,11 +83,12 @@ class BlacklistGenerator(BaseListGenerator):
             return None
 
 
-def generate_blacklist():
+async def generate_blacklist():
     """Точка входу для запуску генератора чорного списку."""
-    generator = BlacklistGenerator()
-    generator.run()
+    generator = await BlacklistGenerator.create()
+    await generator.run()
 
 
 if __name__ == '__main__':
-    generate_blacklist()
+    import asyncio
+    asyncio.run(generate_blacklist())

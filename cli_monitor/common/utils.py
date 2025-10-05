@@ -4,7 +4,7 @@
 """
 
 import json
-import logging
+from loguru import logger
 import os
 from datetime import datetime, timezone
 from dateutil import tz
@@ -12,7 +12,9 @@ from logging.handlers import RotatingFileHandler
 from .config import config
 
 
-def save_to_json(data, filename="output.json"):
+import aiofiles
+
+async def save_to_json(data, filename="output.json"):
     """
     Зберігає дані у файл формату JSON, додаючи мітку часу.
 
@@ -32,8 +34,8 @@ def save_to_json(data, filename="output.json"):
         "last_updated": now_local.strftime('%d/%m/%Y %H:%M'),
         "data": data,
     }
-    with open(filename, "w") as f:
-        json.dump(output_data, f, indent=2)
+    async with aiofiles.open(filename, "w") as f:
+        await f.write(json.dumps(output_data, indent=2))
 
 def format_balances(balances):
     """

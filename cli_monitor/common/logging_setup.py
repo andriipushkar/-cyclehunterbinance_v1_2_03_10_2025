@@ -1,53 +1,40 @@
 """
-Централізоване налаштування логування за допомогою Loguru.
+Цей модуль налаштовує логування для всього додатку з використанням бібліотеки Loguru.
 """
 
 import sys
 from loguru import logger
+from .config import config
 
 def setup_logging():
     """
-    Налаштовує Loguru для розділення логів на різні файли.
+    Налаштовує Loguru для асинхронного логування у файл та консоль.
     """
-    logger.remove()  # Видаляємо стандартний обробник
+    logger.remove()
+    log_level = config.log_level.upper()
 
-    # Додаємо обробник для виводу в консоль з рівнем INFO
+    # Логування в консоль
     logger.add(
-        sys.stderr, 
-        level="INFO",
-        format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan> - <level>{message}</level>"
+        sys.stderr,
+        level=log_level,
+        format="<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>",
+        colorize=True,
+        enqueue=True,  # Робить логування асинхронним
+        backtrace=True,
+        diagnose=True
     )
 
-    # Лог для API клієнта
+    # Логування у файл
     logger.add(
-        "logs/api.log",
-        level="DEBUG",
-        filter="cli_monitor.common.binance_client",
+        "logs/runtime.log",
+        level=log_level,
         rotation="10 MB",
-        compression="zip",
+        retention="10 days",
+        format="{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {name}:{function}:{line} - {message}",
+        enqueue=True,  # Асинхронне логування
         backtrace=True,
         diagnose=True,
-        format="{time} {level} {name}:{function}:{line} {message}"
+        encoding='utf-8'
     )
 
-    # Лог для арбітражного модуля
-    logger.add(
-        "logs/arbitrage.log",
-        level="INFO",
-        filter=lambda record: "arbitrage" in record["name"],
-        rotation="10 MB",
-        compression="zip",
-        format="{time} {level} {name}:{function}:{line} {message}"
-    )
-
-    # Лог для моніторингу балансу
-    logger.add(
-        "logs/monitor.log",
-        level="INFO",
-        filter=lambda record: "balance" in record["name"],
-        rotation="10 MB",
-        compression="zip",
-        format="{time} {level} {name}:{function}:{line} {message}"
-    )
-
-    logger.info("Логування успішно налаштовано через Loguru.")
+    logger.info("Логування налаштовано.")

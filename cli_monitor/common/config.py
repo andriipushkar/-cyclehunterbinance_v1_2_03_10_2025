@@ -7,6 +7,7 @@
 
 import os
 import json
+import aiofiles
 from dotenv import load_dotenv
 from decimal import Decimal
 
@@ -53,7 +54,7 @@ class Config:
         self.balance_monitor_output_txt_path = "output/balance_output.txt"
         self.balance_monitor_monitoring_interval_seconds = 60
 
-    def _load_config_file(self, filename):
+    async def _load_config_file(self, filename):
         """
         Завантажує один конфігураційний файл.
         """
@@ -63,17 +64,18 @@ class Config:
         if not os.path.exists(config_file):
             raise FileNotFoundError(f"Файл конфігурації не знайдено за шляхом: {config_file}")
 
-        with open(config_file, 'r') as f:
-            return json.load(f)
+        async with aiofiles.open(config_file, 'r') as f:
+            content = await f.read()
+            return json.loads(content)
 
-    def load_configs(self):
+    async def load_configs(self):
         """
         Завантажує конфігураційні файли `strategy.json` та `monitor.json`.
 
         Перезаписує значення за замовчуванням налаштуваннями з файлів.
         """
-        strategy_config = self._load_config_file('strategy.json')
-        monitor_config = self._load_config_file('monitor.json')
+        strategy_config = await self._load_config_file('strategy.json')
+        monitor_config = await self._load_config_file('monitor.json')
 
         # Оновлюємо атрибути класу значеннями з файлу strategy.json
         self.base_currency = strategy_config.get('base_currency', self.base_currency)

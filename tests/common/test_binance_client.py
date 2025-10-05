@@ -6,118 +6,106 @@
 """
 
 import pytest
-from unittest.mock import patch, MagicMock
+import pytest_asyncio
+from unittest.mock import patch, AsyncMock
 from binance.exceptions import BinanceAPIException
 from cli_monitor.common.binance_client import BinanceClient
 from cli_monitor.common.exceptions import SymbolPriceError
 from decimal import Decimal
 
-@patch('cli_monitor.common.binance_client.Client')
-def test_binance_client_initialization(MockClient):
-    """Тестує, що при ініціалізації клієнта викликається `ping`."""
-    # Arrange
-    mock_client_instance = MockClient.return_value
-    
-    # Act
-    client = BinanceClient()
-    
-    # Assert
-    MockClient.assert_called_once() # Перевіряємо, що екземпляр `binance.Client` був створений
-    client.client.ping.assert_called_once() # Перевіряємо, що був зроблений `ping`
+@pytest_asyncio.fixture
+async def client(mocker):
+    mocker.patch('binance.AsyncClient.create', return_value=AsyncMock())
+    client = await BinanceClient.create()
+    yield client
+    await client.close_connection()
 
-@patch('cli_monitor.common.binance_client.Client')
-def test_get_spot_balance(MockClient):
+@pytest.mark.asyncio
+async def test_binance_client_initialization(client):
+    """Тестує, що при ініціалізації клієнта викликається `ping`."""
+    client.client.ping.assert_called_once()
+
+@pytest.mark.asyncio
+async def test_get_spot_balance(client):
     """Тестує отримання та фільтрацію спотового балансу."""
     # Arrange
-    mock_client_instance = MockClient.return_value
-    mock_client_instance.get_account.return_value = {
+    client.client.get_account.return_value = {
         'balances': [
-            {'asset': 'BTC', 'free': '1.0'}, # Повинен залишитись
-            {'asset': 'ETH', 'free': '0.0'}  # Повинен бути відфільтрований
+            {'asset': 'BTC', 'free': '1.0'},
+            {'asset': 'ETH', 'free': '0.0'}
         ]
     }
     
     # Act
-    client = BinanceClient()
-    balances = client.get_spot_balance()
+    balances = await client.get_spot_balance()
     
     # Assert
     assert len(balances) == 1
     assert balances[0]['asset'] == 'BTC'
 
-@patch('cli_monitor.common.binance_client.Client')
-def test_get_futures_balance(MockClient):
+@pytest.mark.asyncio
+async def test_get_futures_balance(client):
     """Тестує отримання та фільтрацію ф'ючерсного балансу."""
     # Arrange
-    mock_client_instance = MockClient.return_value
-    mock_client_instance.futures_account_balance.return_value = [
+    client.client.futures_account_balance.return_value = [
         {'asset': 'USDT', 'balance': '1000.0'},
         {'asset': 'BTC', 'balance': '0.0'}
     ]
     
     # Act
-    client = BinanceClient()
-    balances = client.get_futures_balance()
+    balances = await client.get_futures_balance()
     
     # Assert
     assert len(balances) == 1
     assert balances[0]['asset'] == 'USDT'
 
-@patch('cli_monitor.common.binance_client.Client')
-def test_get_symbol_price(MockClient):
+@pytest.mark.asyncio
+async def test_get_symbol_price(client):
     """Тестує отримання ціни для символу."""
     # Arrange
-    mock_client_instance = MockClient.return_value
-    mock_client_instance.get_symbol_ticker.return_value = {'price': '50000.0'}
+    client.client.get_symbol_ticker.return_value = {'price': '50000.0'}
     
     # Act
-    client = BinanceClient()
-    price = client.get_symbol_price('BTC')
+    price = await client.get_symbol_price('BTC')
     
     # Assert
     assert price == 50000.0
 
-@patch('cli_monitor.common.binance_client.Client')
-def test_get_symbol_price_exception(MockClient):
+@pytest.mark.asyncio
+async def test_get_symbol_price_exception(client):
     """Тестує, що при помилці API генерується виняток `SymbolPriceError`."""
     # Arrange
-    mock_client_instance = MockClient.return_value
-    # Імітуємо помилку API
-    mock_response = MagicMock()
+    mock_response = AsyncMock()
     mock_response.text = '{"code": -1121, "msg": "Invalid symbol."}'
-    mock_client_instance.get_symbol_ticker.side_effect = BinanceAPIException(mock_response, 400, mock_response.text)
+    client.client.get_symbol_ticker.side_effect = BinanceAPIException(mock_response, 400, mock_response.text)
     
     # Act & Assert
-    client = BinanceClient()
     with pytest.raises(SymbolPriceError):
-        client.get_symbol_price('INVALID_SYMBOL')
+        await client.get_symbol_price('INVALID_SYMBOL')
 
-@patch('cli_monitor.common.binance_client.Client')
-def test_get_earn_balance(MockClient):
+@pytest.mark.asyncio
+async def test_get_earn_balance(client):
     """Тестує отримання балансу з гаманця Earn."""
     # Arrange
-    mock_client_instance = MockClient.return_value
-    mock_client_instance.get_simple_earn_flexible_product_position.return_value = {
+    client.client.get_simple_earn_flexible_product_position.return_value = {
         'rows': [{'asset': 'USDT', 'totalAmount': '100.0'}]
     }
-    mock_client_instance.get_simple_earn_locked_product_position.return_value = {
+    client.client.get_simple_earn_locked_product_position.return_value = {
         'rows': []
     }
     
     # Act
-    client = BinanceClient()
-    balances = client.get_earn_balance()
+    balances = await client.get_earn_balance()
     
     # Assert
     assert len(balances) == 1
     assert balances[0]['asset'] == 'USDT'
 
-@patch('cli_monitor.common.binance_client.Client')
-def test_get_trade_fees(MockClient):
+@pytest.mark.asyncio
+async def test_get_trade_fees(client):
     """Тестує отримання та кешування торгових комісій."""
     # Arrange
-    mock_client_instance = MockClient.return_value
-    mock_client_instance.get_trade_fee.return_value = {
+    client.client.get_trade_fee.return_value = {
         'tradeFee': [
             {'symbol': 'BTCUSDT', 'takerCommission': '0.001'},
             {'symbol': 'ETHUSDT', 'takerCommission': '0.001'}
@@ -125,33 +113,30 @@ def test_get_trade_fees(MockClient):
     }
     
     # Act
-    client = BinanceClient()
-    fees = client.get_trade_fees()
+    fees = await client.get_trade_fees()
     
     # Assert
     assert len(fees) == 2
     assert fees['BTCUSDT'] == Decimal('0.001')
 
-@patch('cli_monitor.common.binance_client.Client')
-def test_get_trade_fee(MockClient):
+@pytest.mark.asyncio
+async def test_get_trade_fee(client):
     """Тестує отримання комісії для однієї пари та її кешування."""
     # Arrange
-    mock_client_instance = MockClient.return_value
-    mock_client_instance.get_trade_fee.return_value = {
+    client.client.get_trade_fee.return_value = {
         'tradeFee': [
             {'symbol': 'BTCUSDT', 'takerCommission': '0.001'}
         ]
     }
     
     # Act
-    client = BinanceClient()
-    fee = client.get_trade_fee('BTCUSDT')
+    fee = await client.get_trade_fee('BTCUSDT')
     
     # Assert
     assert fee == Decimal('0.001')
     
     # Act again to check caching
-    fee = client.get_trade_fee('BTCUSDT')
+    fee = await client.get_trade_fee('BTCUSDT')
     
     # Assert: метод `get_trade_fee` з `python-binance` мав бути викликаний лише один раз
-    mock_client_instance.get_trade_fee.assert_called_once()
+    client.client.get_trade_fee.assert_called_once()

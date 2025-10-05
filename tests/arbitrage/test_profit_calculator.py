@@ -27,10 +27,9 @@ def mock_config():
 @pytest.fixture
 def profit_monitor(mock_config, mock_binance_client):
     """Фікстура, що створює екземпляр `ProfitMonitor` з моками."""
-    # Мокуємо завантаження цін з файлу, щоб ізолювати тест
     with patch('cli_monitor.arbitrage.profit_calculator.ProfitMonitor._load_latest_prices') as mock_load_prices:
         pm = ProfitMonitor()
-        mock_load_prices.assert_called_once() # Переконуємось, що метод викликався
+        mock_load_prices.assert_called_once()
         yield pm
 
 @pytest.mark.asyncio
@@ -43,7 +42,6 @@ async def test_calculate_and_log_profit_positive(profit_monitor):
     min_profit_threshold = Decimal('0.1')
     profit_monitor.latest_prices = {'BTCUSDT': {'b': '10000', 'a': '10001'}}
     
-    # Мокуємо метод розрахунку прибутку, щоб повернути позитивне значення
     with patch.object(cycle, 'calculate_profit', return_value=Decimal('0.2')) as mock_calculate_profit, \
          patch.object(profit_monitor, '_log_profitable_opportunity') as mock_log_profitable_opportunity:
         
@@ -52,7 +50,6 @@ async def test_calculate_and_log_profit_positive(profit_monitor):
         
         # Assert
         mock_calculate_profit.assert_called_once_with(profit_monitor.latest_prices, symbols_info, trade_fees)
-        # Перевіряємо, що функція логування була викликана, оскільки прибуток > порогу
         mock_log_profitable_opportunity.assert_called_once()
 
 @pytest.mark.asyncio
@@ -65,7 +62,6 @@ async def test_calculate_and_log_profit_negative(profit_monitor):
     min_profit_threshold = Decimal('0.1')
     profit_monitor.latest_prices = {'BTCUSDT': {'b': '10000', 'a': '10001'}}
     
-    # Мокуємо метод розрахунку прибутку, щоб повернути негативне значення
     with patch.object(cycle, 'calculate_profit', return_value=Decimal('-0.1')) as mock_calculate_profit, \
          patch.object(profit_monitor, '_log_profitable_opportunity') as mock_log_profitable_opportunity:
         
@@ -74,7 +70,6 @@ async def test_calculate_and_log_profit_negative(profit_monitor):
         
         # Assert
         mock_calculate_profit.assert_called_once_with(profit_monitor.latest_prices, symbols_info, trade_fees)
-        # Перевіряємо, що функція логування НЕ була викликана
         mock_log_profitable_opportunity.assert_not_called()
 
 @pytest.mark.asyncio

@@ -37,34 +37,39 @@ class ArbitrageApp:
             "start-bot": self._run_start_bot,
         }
 
-    def run(self):
+    async def run(self):
         """Запускає відповідний метод на основі команди."""
         command_func = self._command_map.get(self.args.arbitrage_command)
         if command_func:
-            command_func()
+            await command_func()
         else:
             logger.error(f"Невідома арбітражна команда: {self.args.arbitrage_command}")
 
-    def _run_find_cycles(self):
-        finder = CycleFinder()
-        finder.run(strategy=self.args.strategy)
-
-    def _run_monitor(self):
-        asyncio.run(profit_calculator_main())
-
-    def _run_backtest(self):
-        backtester = Backtester(self.args.start_date, self.args.end_date)
-        asyncio.run(backtester.run())
-
-    def _run_generate_whitelist(self):
-        generate_whitelist()
-
-    def _run_generate_blacklist(self):
-        generate_blacklist()
-
-    def _run_start_bot(self):
+    async def _run_find_cycles(self):
+        finder = None
         try:
-            asyncio.run(start_bot_main())
+            finder = await CycleFinder.create()
+            await finder.run(strategy=self.args.strategy)
+        finally:
+            if finder and finder.client:
+                await finder.client.close_connection()
+
+    async def _run_monitor(self):
+        await profit_calculator_main()
+
+    async def _run_backtest(self):
+        backtester = await Backtester.create(self.args.start_date, self.args.end_date)
+        await backtester.run()
+
+    async def _run_generate_whitelist(self):
+        await generate_whitelist()
+
+    async def _run_generate_blacklist(self):
+        await generate_blacklist()
+
+    async def _run_start_bot(self):
+        try:
+            await start_bot_main()
         except KeyboardInterrupt:
             logger.info("Роботу бота зупинено користувачем.")
 
@@ -97,7 +102,7 @@ def add_arguments(parser):
     # Команда для запуску повноцінного бота
     start_bot_parser = subparsers.add_parser("start-bot", help="Запустити довготривалого арбітражного бота.")
 
-def run(args):
+async def run(args):
     """
     Створює екземпляр ArbitrageApp та запускає його.
 
@@ -105,4 +110,4 @@ def run(args):
         args: Аргументи, розпарсені з командного рядка.
     """
     app = ArbitrageApp(args)
-    app.run()
+    await app.run()
